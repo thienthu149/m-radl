@@ -5,9 +5,12 @@ import { collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, setDoc
 import { auth, db } from './config/firebase';
 import LeafletMap from './components/LeafletMap';
 import OverflowMenu from './components/Menu';
+//LoginModal
+import LoginModal from './components/LoginModal';
 //hooks:
 import { useAuth } from './hooks/useAuth';
 import { useLocation } from './hooks/useLocation';
+import { useLogin } from './hooks/useLogin.js';
 
 // --- OVERPASS API UTILS ---
 const calculateLightingScore = (routeCoords, litElements) => {
@@ -29,7 +32,7 @@ const calculateLightingScore = (routeCoords, litElements) => {
 };
 
 export default function App() {
-  const { user } = useAuth();
+  //const { user } = useAuth();
   const [viewMode, setViewMode] = useState('rider'); 
   const [isSheetExpanded, setIsSheetExpanded] = useState(false); // Controls bottom sheet height
   const [category, setCategory] = useState('navigation');
@@ -61,6 +64,8 @@ export default function App() {
   // UI State
   const [reportMode, setReportMode] = useState(null); 
   const [tempMarker, setTempMarker] = useState(null);
+  const {user, showLogin, loginUser, registerUser, loginGuest, error } = useLogin();
+
 
   // --- INIT & AUTH ---
   /*useEffect(() => {
@@ -312,6 +317,18 @@ export default function App() {
   };
 
   const toggleSheet = () => setIsSheetExpanded(!isSheetExpanded);
+
+  //LogIn
+  if (showLogin) {
+    return (
+      <LoginModal
+        loginUser={loginUser}
+        registerUser={registerUser}
+        loginGuest={loginGuest}
+        error={null} // oder Error-Handling hier
+      />
+    );
+  }
 
   return (
     <div className="h-screen w-full bg-gray-900 text-white overflow-hidden font-sans relative flex flex-col">
