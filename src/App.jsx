@@ -51,8 +51,18 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    const unsubThefts = onSnapshot(collection(db, 'theft_reports'), (s) => 
+    const unsubThefts = onSnapshot(collection(db, 'theft_reports'), (s) => {
+      //the database has no theft zones yet, so we use hardcoded test zones for now
+      const realZones = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      // --- HARDCODED TEST ZONES ---
+      const testZones = [
+          // Zone 1: Very close to default Munich start (Active Danger)
+          { id: 'test-zone-1', lat: 48.1351, lng: 11.5820 }, 
+          { id: 'test-zone-2', lat: 48.1500, lng: 11.5900 },
+          { id: 'test-zone-3', lat: 48.1400, lng: 11.5600 }
+      ];
       setTheftZones(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    }
     );
     const unsubRacks = onSnapshot(collection(db, 'bike_racks'), (s) => 
       setBikeRacks(s.docs.map(d => ({ id: d.id, ...d.data() })))
@@ -66,42 +76,83 @@ export default function App() {
       interval = setInterval(async () => {
         try {
           const tripRef = doc(db, 'active_trips', tripId);
+          const testTimestamp = new Date(1);
           await updateDoc(tripRef, {
             lat: currentLocation.lat,
             lng: currentLocation.lng,
+            //TODO: test if this works for lastUpdate
             lastUpdate: serverTimestamp(),
             status: 'active'
           });
         } catch (e) { console.error(e); }
-      }, 5000);
+      }, 1000);
     }
     return () => clearInterval(interval);
   }, [isSharing, tripId, currentLocation, user]);
 
+// WATCHER EFFECT - Listens to location updates
   useEffect(() => {
     if (viewMode === 'watcher' && tripId && user) {
+      console.log("Connecting to DB for Trip:", tripId);
+
       const unsub = onSnapshot(doc(db, 'active_trips', tripId), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setWatchedLocation({ lat: data.lat, lng: data.lng });
+          
           if (data.lastUpdate) {
-            const diff = Date.now() - data.lastUpdate.toMillis();
             setLastUpdate(data.lastUpdate.toMillis());
-            
-            const isNearDanger = theftZones.some(zone => {
-               const dist = Math.sqrt(Math.pow(zone.lat - data.lat, 2) + Math.pow(zone.lng - data.lng, 2));
-               return dist < 0.002; 
-            });
-            
-            const shouldTriggerAlert = diff > 300000 && isNearDanger;
-            setIsDangerAlert(shouldTriggerAlert);
-            
           }
+        } else {
+          console.log("Document does not exist!");
         }
       });
       return () => unsub();
     }
-  }, [viewMode, tripId, user, theftZones]);
+  }, [viewMode, tripId, user]);
+
+  // ALARM CHECK EFFECT - Runs on fixed 30-second interval
+  useEffect(() => {
+    if (viewMode === 'watcher' && tripId && lastUpdate > 0 && watchedLocation) {
+      console.log("Starting alarm check interval (every 30s)");
+      
+      const checkAlarm = () => {
+        const now = Date.now();
+        const diff = now - lastUpdate;
+        
+        // Check if rider is in a danger zone
+        const isNearDanger = theftZones.some(zone => {
+          const dist = Math.sqrt(
+            Math.pow(zone.lat - watchedLocation.lat, 2) + 
+            Math.pow(zone.lng - watchedLocation.lng, 2)
+          );
+          
+          if (dist < 0.01) {
+            console.log(`Distance to Zone ${zone.id || '?'}: ${dist.toFixed(5)} (Threshold: 0.002)`);
+          }
+          
+          return dist < 0.002;//ugf 200m
+        });
+        
+        console.log(`Time since last update: ${diff}ms (${(diff/1000).toFixed(0)}s)`);
+        console.log(`In Danger Zone? ${isNearDanger ? 'YES' : 'NO'}`);
+        
+        // Alert if in danger zone AND no update for 60 seconds (1 minute)
+        const shouldTriggerAlert = diff > 60000 && isNearDanger;
+        
+        console.log(`ALERT STATUS: ${shouldTriggerAlert}`);
+        setIsDangerAlert(shouldTriggerAlert);
+      };
+      
+      // Check immediately on mount
+      checkAlarm();
+      
+      // Then check every 30 seconds
+      const interval = setInterval(checkAlarm, 30000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [viewMode, tripId, lastUpdate, watchedLocation, theftZones]);
 
   const calculateRoute = async () => {
     if (!destination) return;
