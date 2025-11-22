@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M-Radl - Sicher Radfahren in München</title>
+    <meta name="description" content="Eine Web-App für Radfahrer in München, um sicherer unterwegs zu sein">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <h1 class="logo">🚴 M-Radl</h1>
+                <ul class="nav-menu">
+                    <li><a href="#map">Karte</a></li>
+                    <li><a href="#safety">Sicherheit</a></li>
+                    <li><a href="#stations">Stationen</a></li>
+                    <li><a href="#weather">Wetter</a></li>
+                    <li><a href="#emergency">Notfall</a></li>
+                </ul>
+                <button class="menu-toggle" aria-label="Menu">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="container">
+                <h2>Sicher Radfahren in München</h2>
+                <p>Deine App für sichere Radwege, Notfallkontakte und wichtige Infos</p>
+                <a href="#map" class="btn btn-primary">Karte erkunden</a>
+            </div>
+        </section>
+
+        <!-- Map Section -->
+        <section id="map" class="section">
+            <div class="container">
+                <h2>🗺️ Interaktive Karte</h2>
+                <p class="section-intro">Erkunde Radwege, Reparaturstationen und sichere Routen in München</p>
+                <div class="map-controls">
+                    <button class="btn btn-small" id="show-bike-lanes">Radwege anzeigen</button>
+                    <button class="btn btn-small" id="show-repair-stations">Reparaturstationen</button>
+                    <button class="btn btn-small" id="show-parking">Fahrradparkplätze</button>
+                    <button class="btn btn-small" id="locate-me">📍 Mein Standort</button>
+                </div>
+                <div id="munich-map" class="map-container"></div>
+            </div>
+        </section>
+
+        <!-- Safety Tips Section -->
+        <section id="safety" class="section section-alt">
+            <div class="container">
+                <h2>🦺 Sicherheitstipps</h2>
+                <div class="tips-grid">
+                    <div class="tip-card">
+                        <div class="tip-icon">🪖</div>
+                        <h3>Helm tragen</h3>
+                        <p>Trage immer einen Helm, um dein Kopf zu schützen. Ein Helm kann schwere Verletzungen verhindern.</p>
+                    </div>
+                    <div class="tip-card">
+                        <div class="tip-icon">💡</div>
+                        <h3>Beleuchtung</h3>
+                        <p>Stelle sicher, dass dein Fahrrad mit funktionierenden Lichtern ausgestattet ist. Vorne weiß, hinten rot.</p>
+                    </div>
+                    <div class="tip-card">
+                        <div class="tip-icon">👀</div>
+                        <h3>Sichtbar sein</h3>
+                        <p>Trage helle oder reflektierende Kleidung, besonders bei Dämmerung und Dunkelheit.</p>
+                    </div>
+                    <div class="tip-card">
+                        <div class="tip-icon">🚦</div>
+                        <h3>Verkehrsregeln</h3>
+                        <p>Halte dich an Verkehrsregeln und Ampeln. Respektiere andere Verkehrsteilnehmer.</p>
+                    </div>
+                    <div class="tip-card">
+                        <div class="tip-icon">✋</div>
+                        <h3>Handzeichen</h3>
+                        <p>Zeige deine Abbiegeabsichten deutlich mit Handzeichen an.</p>
+                    </div>
+                    <div class="tip-card">
+                        <div class="tip-icon">🔧</div>
+                        <h3>Wartung</h3>
+                        <p>Überprüfe regelmäßig Bremsen, Reifen und Kette deines Fahrrads.</p>
+                    </div>
+                </div>
+
+                <div class="safety-rules">
+                    <h3>Wichtige Verkehrsregeln für Radfahrer in München</h3>
+                    <ul>
+                        <li>Radwege müssen benutzt werden, wenn sie mit einem blauen Schild gekennzeichnet sind</li>
+                        <li>Fahre auf der rechten Straßenseite</li>
+                        <li>Höre nicht Musik über Kopfhörer - du musst den Verkehr hören können</li>
+                        <li>Telefonieren nur mit Freisprechanlage</li>
+                        <li>Promillegrenze: 1,6 ‰ (aber schon ab 0,3 ‰ bei Auffälligkeiten strafbar)</li>
+                        <li>Fahre nicht nebeneinander, außer auf Radwegen</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stations Section -->
+        <section id="stations" class="section">
+            <div class="container">
+                <h2>🔧 Reparatur & Service</h2>
+                <div class="stations-grid">
+                    <div class="station-card">
+                        <h3>Reparaturstationen</h3>
+                        <p>Selbstbedienungs-Reparaturstationen mit Werkzeugen:</p>
+                        <ul>
+                            <li>Marienplatz - Am Stadtmuseum</li>
+                            <li>Hauptbahnhof - Arnulfstraße</li>
+                            <li>Englischer Garten - Chinesischer Turm</li>
+                            <li>Olympiapark - Am See</li>
+                            <li>Sendlinger Tor - Lindwurmstraße</li>
+                        </ul>
+                    </div>
+                    <div class="station-card">
+                        <h3>MVG Rad Stationen</h3>
+                        <p>Leihfahrräder an über 200 Stationen in München verfügbar.</p>
+                        <a href="https://www.mvg.de/services/mobile-services/mvg-rad.html" target="_blank" class="btn btn-small">MVG Rad Website</a>
+                    </div>
+                    <div class="station-card">
+                        <h3>Fahrradgeschäfte</h3>
+                        <p>Professionelle Hilfe und Beratung:</p>
+                        <ul>
+                            <li>Radlbauer - Mehrere Standorte</li>
+                            <li>Little John Bikes - Schwabing</li>
+                            <li>Cycle Lab - Maxvorstadt</li>
+                            <li>Sport Münzinger - Schwabing</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Weather Section -->
+        <section id="weather" class="section section-alt">
+            <div class="container">
+                <h2>🌤️ Wetter in München</h2>
+                <div id="weather-info" class="weather-container">
+                    <div class="loading">Wetterdaten werden geladen...</div>
+                </div>
+                <div class="weather-tips">
+                    <h3>Wetter-Tipps fürs Radfahren</h3>
+                    <ul>
+                        <li>☀️ <strong>Sonnig:</strong> Ideal zum Radfahren! Denk an Sonnenschutz.</li>
+                        <li>🌧️ <strong>Regen:</strong> Regenkleidung tragen, Geschwindigkeit reduzieren, Bremsweg verlängert sich.</li>
+                        <li>❄️ <strong>Winter:</strong> Winterreifen für Fahrräder verwenden, besonders vorsichtig bei Glätte.</li>
+                        <li>💨 <strong>Wind:</strong> Bei starkem Wind defensiver fahren, besonders auf Brücken.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Emergency Section -->
+        <section id="emergency" class="section">
+            <div class="container">
+                <h2>🚨 Notfall & Kontakte</h2>
+                <div class="emergency-grid">
+                    <div class="emergency-card urgent">
+                        <h3>Notruf</h3>
+                        <div class="emergency-numbers">
+                            <div class="number">
+                                <span class="label">Polizei:</span>
+                                <a href="tel:110" class="phone">110</a>
+                            </div>
+                            <div class="number">
+                                <span class="label">Feuerwehr / Rettung:</span>
+                                <a href="tel:112" class="phone">112</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="emergency-card">
+                        <h3>ADFC München</h3>
+                        <p>Allgemeiner Deutscher Fahrrad-Club</p>
+                        <div class="number">
+                            <span class="label">Telefon:</span>
+                            <a href="tel:08977357679" class="phone">089 773576-79</a>
+                        </div>
+                        <a href="https://adfc-muenchen.de/" target="_blank" class="btn btn-small">Website</a>
+                    </div>
+                    <div class="emergency-card">
+                        <h3>Fundbüro München</h3>
+                        <p>Gestohlenes oder verlorenes Fahrrad melden</p>
+                        <div class="number">
+                            <span class="label">Telefon:</span>
+                            <a href="tel:08923396100" class="phone">089 233-96100</a>
+                        </div>
+                    </div>
+                    <div class="emergency-card">
+                        <h3>Fahrrad gestohlen?</h3>
+                        <ul>
+                            <li>1. Polizei informieren (Anzeige erstatten)</li>
+                            <li>2. Rahmennummer bereithalten</li>
+                            <li>3. Versicherung kontaktieren</li>
+                            <li>4. Online-Portale prüfen (eBay, etc.)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="tips-box">
+                    <h3>Bei einem Unfall</h3>
+                    <ol>
+                        <li>Bleibe ruhig und sichere die Unfallstelle</li>
+                        <li>Rufe den Notruf (112 oder 110)</li>
+                        <li>Leiste Erste Hilfe, wenn nötig</li>
+                        <li>Dokumentiere den Unfall (Fotos, Zeugen)</li>
+                        <li>Tausche Kontaktdaten mit Beteiligten aus</li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+        <!-- App Info Section -->
+        <section class="section section-alt">
+            <div class="container">
+                <h2>📱 Weitere nützliche Apps</h2>
+                <div class="apps-grid">
+                    <div class="app-card">
+                        <h3>MVG Fahrinfo München</h3>
+                        <p>Öffentliche Verkehrsmittel in München</p>
+                    </div>
+                    <div class="app-card">
+                        <h3>Komoot</h3>
+                        <p>Routenplanung für Radtouren</p>
+                    </div>
+                    <div class="app-card">
+                        <h3>Strava</h3>
+                        <p>Aktivitäten aufzeichnen und teilen</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 M-Radl - Sicher Radfahren in München</p>
+            <p>Eine Web-App für mehr Sicherheit im Münchner Radverkehr</p>
+            <p class="small">Erstellt für HackaTUM - Daten basieren auf öffentlichen Quellen</p>
+        </div>
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
