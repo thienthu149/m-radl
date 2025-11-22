@@ -5,6 +5,9 @@ import { collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, setDoc
 import { auth, db } from './config/firebase';
 import LeafletMap from './components/LeafletMap';
 import OverflowMenu from './components/Menu';
+//hooks:
+import { useAuth } from './hooks/useAuth';
+import { useLocation } from './hooks/useLocation';
 
 // --- OVERPASS API UTILS ---
 const calculateLightingScore = (routeCoords, litElements) => {
@@ -26,13 +29,13 @@ const calculateLightingScore = (routeCoords, litElements) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [viewMode, setViewMode] = useState('rider'); 
   const [isSheetExpanded, setIsSheetExpanded] = useState(false); // Controls bottom sheet height
   const [category, setCategory] = useState('navigation');
   
   // Map & Data State
-  const [currentLocation, setCurrentLocation] = useState({ lat: 48.1351, lng: 11.5820 });
+  const { currentLocation, setCurrentLocation } = useLocation();
   const [zoom, setZoom] = useState(13);
   const [theftZones, setTheftZones] = useState([]);
   const [bikeRacks, setBikeRacks] = useState([]);
@@ -60,7 +63,7 @@ export default function App() {
   const [tempMarker, setTempMarker] = useState(null);
 
   // --- INIT & AUTH ---
-  useEffect(() => {
+  /*useEffect(() => {
     signInAnonymously(auth);
     const unsubAuth = onAuthStateChanged(auth, setUser);
     if (navigator.geolocation) {
@@ -71,7 +74,7 @@ export default function App() {
       );
     }
     return unsubAuth;
-  }, []);
+  }, []);*/
 
   // --- FIRESTORE LISTENERS ---
   useEffect(() => {
