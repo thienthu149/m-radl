@@ -74,13 +74,41 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
             <RecenterMap center={watchedPos ? [watchedPos.lat, watchedPos.lng] : null} />
 
             {tempMarker && (
-                <Marker 
-                     position={[tempMarker.lat, tempMarker.lng]} 
-                     icon={createCustomIcon('#facc15', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>')} 
-                     interactive={false}
-                >
-                    <Popup>Confirm Location</Popup>
-                </Marker>
+                <>
+                    {/* CASE 1: Report Theft -> RED CIRCLE */}
+                    {reportMode === 'report_theft' && (
+                        <Circle 
+                            center={[tempMarker.lat, tempMarker.lng]} 
+                            radius={300} 
+                            pathOptions={{ 
+                                color: '#ef4444', // Red
+                                fillColor: '#ef4444', 
+                                fillOpacity: 0.4, 
+                                dashArray: '10, 10', 
+                                weight: 2 
+                            }}
+                            interactive={false}
+                        />
+                    )}
+
+                    {/* CASE 2: Add Rack -> GREEN PIN */}
+                    {reportMode === 'add_rack' && (
+                        <Marker 
+                             position={[tempMarker.lat, tempMarker.lng]} 
+                             icon={createCustomIcon('#22c55e', rackSvg)} // Green
+                             interactive={false}
+                        />
+                    )}
+
+                    {/* CASE 3: Add Repair -> YELLOW PIN */}
+                    {reportMode === 'add_repair' && (
+                        <Marker 
+                             position={[tempMarker.lat, tempMarker.lng]} 
+                             icon={createCustomIcon('#eab308', repairSvg)} // Yellow
+                             interactive={false}
+                        />
+                    )}
+                </>
             )}
 
             {/* Current User - Slightly larger icon */}

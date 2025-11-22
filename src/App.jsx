@@ -272,7 +272,8 @@ export default function App() {
 
   const handleMapClick = useCallback((pos) => {      
     setTempMarker(pos);
-    setIsSheetExpanded(true); // Expand sheet so they can see the "Confirm" button
+    setIsSheetExpanded(false); 
+    // Expand sheet so they can see the "Confirm" button
   }, []);
 
   const submitReport = async () => {
@@ -332,6 +333,34 @@ export default function App() {
         </div>
       </div>
 
+      {/* --- Floating Confirmation Pop-up --- */}
+      {tempMarker && reportMode && (
+        <div className="absolute bottom-28 left-4 right-4 z-50 animate-in slide-in-from-bottom-10 fade-in duration-300 pointer-events-auto">
+            <div className="bg-gray-900/95 backdrop-blur-md p-4 rounded-2xl border border-yellow-500 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+                <div className="flex items-center justify-between mb-3">
+                    <div>
+                        <h3 className="font-bold text-white">Confirm Location</h3>
+                        <p className="text-xs text-gray-400">
+                            {reportMode === 'report_theft' && 'Mark theft zone here?'}
+                            {reportMode === 'add_rack' && 'Add bike rack here?'}
+                            {reportMode === 'add_repair' && 'Add repair station here?'}
+                        </p>
+                    </div>
+                    <button onClick={() => setTempMarker(null)} className="p-2 bg-gray-800 rounded-full text-gray-400 hover:text-white">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <button 
+                    onClick={submitReport} 
+                    className="w-full bg-yellow-500 hover:bg-yellow-400 text-black py-3 rounded-xl font-bold text-sm shadow-lg transition-colors flex items-center justify-center gap-2"
+                >
+                    ✅ Confirm & Submit
+                </button>
+            </div>
+        </div>
+      )}
+
       {/* --- 3. Sliding Bottom Sheet --- */}
       <div 
         className={`absolute bottom-0 left-0 right-0 z-20 bg-gray-800 border-t border-gray-700 rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.5)] transition-all duration-300 ease-in-out flex flex-col
@@ -356,8 +385,15 @@ export default function App() {
               <OverflowMenu 
                 setCategory={(cat) => {
                     setCategory(cat);
-                    setReportMode(null);
-                    setIsSheetExpanded(true); 
+                    setTempMarker(null);
+                    //setReportMode(null);
+                    if (cat === 'navigation' || cat === 'emergency') {
+                      setReportMode(null);
+                      setIsSheetExpanded(true);
+                    } else {
+                      setReportMode(cat);
+                      setIsSheetExpanded(false);
+                    }
                 }} 
                 customTrigger={<MenuIcon size={24} className="text-gray-300" />}
               />
@@ -472,42 +508,10 @@ export default function App() {
             {category === 'report' && (
                   <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
                     <div className="text-center pb-2">
-                        <h3 className="text-xl font-bold text-white">Reporting Tools</h3>
+                        <h3 className="text-xl font-bold text-white">Reporting Theft</h3>
                         <p className="text-xs text-gray-400">Help the community by reporting issues</p>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <button onClick={() => { setReportMode('report_theft'); setIsSheetExpanded(false); }} 
-                            className={`h-32 rounded-2xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${reportMode === 'report_theft' ? 'bg-red-500/20 border-red-500 text-white scale-95' : 'bg-gray-700/30 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
-                          <div className="p-3 bg-red-500/20 rounded-full"><AlertTriangle size={32} className="text-red-500"/></div>
-                          <span className="text-sm font-medium">Report Theft</span>
-                        </button>
-                        <button onClick={() => { setReportMode('add_rack'); setIsSheetExpanded(false); }} 
-                            className={`h-32 rounded-2xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${reportMode === 'add_rack' ? 'bg-green-500/20 border-green-500 text-white scale-95' : 'bg-gray-700/30 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
-                          <div className="p-3 bg-green-500/20 rounded-full"><MapPin size={32} className="text-green-500"/></div>
-                          <span className="text-sm font-medium">Add Rack</span>
-                        </button>
-                        <button onClick={() => { setReportMode('add_repair'); setIsSheetExpanded(false); }} 
-                            className={`h-32 rounded-2xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${reportMode === 'add_repair' ? 'bg-yellow-500/20 border-yellow-500 text-white scale-95' : 'bg-gray-700/30 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
-                          <div className="p-3 bg-yellow-500/20 rounded-full"><Wrench size={32} className="text-yellow-500"/></div>
-                          <span className="text-sm font-medium">Add Repair Station</span>
-                        </button>
-                    </div>
                     <p className="text-center text-xs text-gray-500 pt-4">Select an option to close this menu and tap the location on the map.</p>
-                    
-                    {/* CONFIRMATION BUTTON APPEARS HERE IF MARKER SET */}
-                    {tempMarker && (
-                        <div className="bg-gray-700 p-4 rounded-2xl border border-gray-600 mt-4">
-                             <p className="text-center text-white mb-2 text-sm">Location selected!</p>
-                             <button 
-                               onClick={submitReport} 
-                               className="w-full bg-yellow-500 hover:bg-yellow-600 py-3 rounded-lg font-bold text-gray-900 shadow-lg transition-colors"
-                             >
-                               ✅ Confirm & Submit
-                             </button>
-                             <button onClick={() => setTempMarker(null)} className="w-full text-xs text-gray-400 mt-2 underline">Cancel selection</button>
-                        </div>
-                    )}
                   </div>
             )}
 
@@ -516,6 +520,13 @@ export default function App() {
                     <div className="mx-auto w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center"><Bike size={32} className="text-gray-400"/></div>
                     <h3 className="text-xl font-bold">Add bike rack</h3>
                     <p className="text-gray-400 text-sm">Go to the "Report" menu to add a new rack.</p>
+                    <div className="grid grid-cols-2 gap-4">
+                        <button onClick={() => { setReportMode('add_rack'); setIsSheetExpanded(false); }} 
+                            className={`h-32 rounded-2xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${reportMode === 'add_rack' ? 'bg-green-500/20 border-green-500 text-white scale-95' : 'bg-gray-700/30 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                          <div className="p-3 bg-green-500/20 rounded-full"><MapPin size={32} className="text-green-500"/></div>
+                          <span className="text-sm font-medium">Add Rack</span>
+                        </button>
+                    </div>
                   </div>
             )}
 
@@ -542,7 +553,13 @@ export default function App() {
                   <div className="text-center space-y-4 py-8">
                     <div className="mx-auto w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center"><Wrench size={32} className="text-gray-400"/></div>
                     <h3 className="text-xl font-bold">Add repair stations</h3>
-                    <p className="text-gray-400 text-sm">Go to the "Report" menu to add a new station.</p>
+                    <div className="grid grid-cols-2 gap-4">
+                        <button onClick={() => { setReportMode('add_repair'); setIsSheetExpanded(false); }} 
+                            className={`h-32 rounded-2xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${reportMode === 'add_repair' ? 'bg-yellow-500/20 border-yellow-500 text-white scale-95' : 'bg-gray-700/30 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                          <div className="p-3 bg-yellow-500/20 rounded-full"><Wrench size={32} className="text-yellow-500"/></div>
+                          <span className="text-sm font-medium">Add Repair Station</span>
+                        </button>
+                    </div>
                   </div>
             )}
         </div>
@@ -550,7 +567,7 @@ export default function App() {
       
       {/* Overlay for "Tap map" instruction */}
       {reportMode && !tempMarker && !isSheetExpanded && (
-            <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 bg-yellow-500 text-black px-4 py-2 rounded-full font-bold text-sm shadow-lg animate-bounce pointer-events-none">
+            <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-30 bg-yellow-500 text-black px-4 py-2 rounded-full font-bold text-sm shadow-lg pointer-events-none">
                 Tap map to set location
             </div>
       )}
