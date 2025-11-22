@@ -62,9 +62,8 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
     return (
         <MapContainer center={[center.lat, center.lng]} zoom={zoom} style={{ height: "100%", width: "100%", background: '#111827' }}>
             <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                attribution='© <a href="https://www.openstreetmap.org/copyright">OSM</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                className="map-tiles-dark"
             />
 
             {tempMarker && (
@@ -98,7 +97,7 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
                     {isWellLit && (
                         <Polyline 
                             positions={routeCoords} 
-                            color="#22d3ee" // Cyan
+                            color="#3b82f6" // Cyan
                             weight={12} 
                             opacity={0.3} 
                             interactive={false}
@@ -106,10 +105,9 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
                     )}
                     <Polyline 
                         positions={routeCoords} 
-                        color={isWellLit ? "#22d3ee" : "#ef4444"} // Cyan vs Red
+                        color= "#3b82f6" // Color cyan
                         weight={5} 
                         opacity={1} 
-                        dashArray={isWellLit ? null : '10, 10'} 
                         interactive={false}
                     />
                 </>
@@ -127,7 +125,7 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
                         fillOpacity: 0.2, // Low opacity allows stacking to create "hotter" red
                         stroke: false 
                     }}
-                    interactive={isInteractive} 
+                    interactive={isInteractive}
                 >
                     <Popup>
                         <div className="text-red-500 font-bold">Danger Zone</div>
