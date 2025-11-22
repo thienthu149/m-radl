@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MapPin, Navigation, AlertTriangle, Bike, Share2, Eye, Menu, X, Sun, Moon, Copy, ExternalLink, Loader2 } from 'lucide-react';
+import { Navigation, AlertTriangle, Bike, Share2, Eye, Menu as MenuIcon, X, Sun, Moon, Copy, ChevronUp, ChevronDown, MapPin, ExternalLink, Wrench, Loader2 } from 'lucide-react';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './config/firebase';
 import LeafletMap from './components/LeafletMap';
-import { Wrench } from 'lucide-react';
+import OverflowMenu from './components/Menu';
 
 // --- OVERPASS API UTILS ---
 const calculateLightingScore = (routeCoords, litElements) => {
@@ -28,7 +28,8 @@ const calculateLightingScore = (routeCoords, litElements) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [viewMode, setViewMode] = useState('rider'); 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSheetExpanded, setIsSheetExpanded] = useState(false); // Controls bottom sheet height
+  const [category, setCategory] = useState('navigation');
   
   // Map & Data State
   const [currentLocation, setCurrentLocation] = useState({ lat: 48.1351, lng: 11.5820 });
@@ -58,7 +59,6 @@ export default function App() {
   const [reportMode, setReportMode] = useState(null); 
   const [tempMarker, setTempMarker] = useState(null);
 
-
   // --- INIT & AUTH ---
   useEffect(() => {
     signInAnonymously(auth);
@@ -79,16 +79,8 @@ export default function App() {
     const unsubThefts = onSnapshot(collection(db, 'theft_reports'), (s) => {
       //the database has no theft zones yet, so we use hardcoded test zones for now
       const realZones = s.docs.map(d => ({ id: d.id, ...d.data() }));
-      // --- HARDCODED TEST ZONES ---
-      const testZones = [
-          // Zone 1: Very close to default Munich start (Active Danger)
-          { id: 'test-zone-1', lat: 48.1351, lng: 11.5820 }, 
-          { id: 'test-zone-2', lat: 48.1500, lng: 11.5900 },
-          { id: 'test-zone-3', lat: 48.1400, lng: 11.5600 }
-      ];
       setTheftZones(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    }
-    );
+    });
     const unsubRacks = onSnapshot(collection(db, 'bike_racks'), (s) => 
       setBikeRacks(s.docs.map(d => ({ id: d.id, ...d.data() })))
     );
@@ -98,232 +90,189 @@ export default function App() {
     return () => { unsubThefts(); unsubRacks(); unsubRepair();};
   }, [user]);
 
-  // --- ROUTING ENGINE (GraphHopper Version) --- AI STUDIOS
-const calculateRoute = async () => {
-  if (!destination) return;
-  setIsCalculating(true);
-  setSafetyNote(null);
-
-  
-  const GH_API_KEY = import.meta.env.VITE_GH_API_KEY
-
-  try {
-    // 1. Geocode (Keeping Nominatim as it's free and works)
-    const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${destination}, Munich`);
-    const geoData = await geoRes.json();
-    if (!geoData.length) { alert("Location not found"); setIsCalculating(false); return; }
+  // --- ROUTING ENGINE (GraphHopper Version) ---
+  // --- ROUTING ENGINE (GraphHopper Version) ---
+  const calculateRoute = async () => {
+    if (!destination) return;
+    setIsCalculating(true);
+    setSafetyNote(null);
+    setIsSheetExpanded(false); 
     
-    const dCoords = { lat: parseFloat(geoData[0].lat), lng: parseFloat(geoData[0].lon) };
-    setDestCoords(dCoords);
+    const GH_API_KEY = import.meta.env.VITE_GH_API_KEY
 
-    // 2. PREPARE GRAPHHOPPER URLS
-    const startPt = `${currentLocation.lat},${currentLocation.lng}`;
-    const endPt = `${dCoords.lat},${dCoords.lng}`;
-    
-    // Common params: calculate points, no encoded polyline (easier to read), imperial false
-    const commonParams = `&points_encoded=false&elevation=false&key=${GH_API_KEY}`;
+    try {
+      // 1. Geocode (SWITCHED TO GRAPHHOPPER TO FIX CORS/403 ERROR)
+      const geoRes = await fetch(`https://graphhopper.com/api/1/geocode?q=${destination}, Munich&locale=en&debug=true&key=${GH_API_KEY}`);
+      const geoData = await geoRes.json();
 
-    // ROUTE A: THE "WILD" ROUTE (Parks/Woods/Gravel)
-    // Use 'foot' because 'mtb' requires a paid plan. 
-    // 'foot' successfully finds paths through parks/woods that 'bike' ignores.
-    const wildUrl = `https://graphhopper.com/api/1/route?point=${startPt}&point=${endPt}&profile=foot&algorithm=alternative_route${commonParams}`;
-
-    // ROUTE B: THE "CITY" ROUTE (Asphalt/Roads)
-    // We use 'bike' (City Bike) which hates unpaved surfaces.
-    // We use 'fastest' to stick to main infrastructure.
-    const cityUrl = `https://graphhopper.com/api/1/route?point=${startPt}&point=${endPt}&profile=bike${commonParams}`;
-
-    // Fetch both simultaneously
-    const [wildRes, cityRes] = await Promise.all([
-        fetch(wildUrl).then(r => r.json()).catch(e => console.error(e)),
-        fetch(cityUrl).then(r => r.json()).catch(e => console.error(e))
-    ]);
-
-    let selectedPath = null;
-    let pathType = "";
-
-    // --- SELECTION LOGIC ---
-
-    if (!isWellLit) {
-        // === NON-SAFE MODE (Direct/Shortest) ===
-        // We use the FOOT path (wildRes) because it finds the geometric shortcut 
-        // through parks/woods that standard bike algorithms ignore.
-        if (wildRes && wildRes.paths && wildRes.paths.length > 0) {
-            selectedPath = wildRes.paths[0];
-            // We estimate the duration for a BIKE (not walking speed)
-            // A rough estimate is that a bike is ~3-4x faster than walking.
-            // GraphHopper 'foot' times are very slow, so we recalculate:
-            selectedPath.time = (selectedPath.distance / 5.0) * 1000; // approx 18km/h in ms
-            
-            pathType = "Most direct path";
-        } else {
-            // Fallback
-            selectedPath = cityRes.paths[0];
-            pathType = "Road (No off-road shortcut found)";
-        }
-    }
-    else {
-        // === SAFE MODE (Lit/Roads) ===
-        // We strictly pick the City Bike path.
-        // This path avoids dark alleys and mud, sticking to street-lit infrastructure.
-        if (cityRes && cityRes.paths && cityRes.paths.length > 0) {
-            selectedPath = cityRes.paths[0];
-            pathType = "City Infrastructure (Paved/Roads)";
-
-            // --- OPTIONAL: Run your Lighting Score on this path just for display ---
-            const minLat = Math.min(currentLocation.lat, dCoords.lat) - 0.01;
-            const maxLat = Math.max(currentLocation.lat, dCoords.lat) + 0.01;
-            const minLng = Math.min(currentLocation.lng, dCoords.lng) - 0.01;
-            const maxLng = Math.max(currentLocation.lng, dCoords.lng) + 0.01;
-            
-            // (We do this asynchronously to not block the UI rendering the route immediately)
-            const query = `[out:json][timeout:5];(way["lit"="yes"](${minLat},${minLng},${maxLat},${maxLng});node["highway"="street_lamp"](${minLat},${minLng},${maxLat},${maxLng}););out center;`;
-            
-            fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query })
-              .then(r => r.json())
-              .then(data => {
-                 const coords = selectedPath.points.coordinates.map(c => [c[1], c[0]]);
-                 const score = calculateLightingScore(coords, data.elements || []);
-                 const normalized = score / (selectedPath.distance / 1000);
-                 setSafetyNote(`Safe Route Active. Lighting Score: ${normalized.toFixed(1)}`);
-              })
-              .catch(() => setSafetyNote("Safe Route Active (Lighting data unavailable)"));
-
-        } else {
-            selectedPath = wildRes.paths[0];
-            pathType = "Direct Path (Safe route unavailable)";
-        }
-    }
-
-    if (!selectedPath) {
-        alert("GraphHopper could not find a route. Check API Key.");
-        setIsCalculating(false);
-        return;
-    }
-
-    // 3. Update State
-    // GraphHopper GeoJSON is [lng, lat], Leaflet needs [lat, lng]
-    const leafletCoords = selectedPath.points.coordinates.map(c => [c[1], c[0]]);
-    setRouteCoords(leafletCoords);
-    
-    setRouteDistance((selectedPath.distance / 1000).toFixed(2));
-    // GraphHopper returns time in milliseconds
-    setRouteDuration(Math.round(selectedPath.time / 60000)); 
-    
-    if (!isWellLit || !safetyNote) {
-        setSafetyNote(`${pathType}`);
-    }
-
-  } catch (e) { 
-      console.error(e); 
-      alert("Error fetching route. Did you add the API Key?");
-  } finally {
-      setIsCalculating(false);
-  }
-};
-
-useEffect(() => {
-  let interval;
-
-  if (isSharing && tripId && user) {
-    // 1. Start the interval only if all conditions are met
-    interval = setInterval(async () => {
-      try {
-        const tripRef = doc(db, 'active_trips', tripId);
-        
-        // 2. The update logic is correct
-        await updateDoc(tripRef, {
-          lat: currentLocation.lat,
-          lng: currentLocation.lng,
-          lastUpdate: serverTimestamp(),
-          status: 'active'
-        });
-      } catch (e) {
-        console.error("Error updating location:", e);
+      // GraphHopper returns results in a "hits" array
+      if (!geoData.hits || geoData.hits.length === 0) { 
+          alert("Location not found"); 
+          setIsCalculating(false); 
+          return; 
       }
-    }, 5000);
-  }
+      
+      // GraphHopper structure is slightly different than Nominatim
+      const hit = geoData.hits[0];
+      const dCoords = { lat: hit.point.lat, lng: hit.point.lng };
+      
+      setDestCoords(dCoords);
 
-  // 3. Cleanup function to clear the interval when the component unmounts 
-  // or when dependencies change (and the effect runs again).
-  return () => {
-    if (interval) {
-      clearInterval(interval);
+      // 2. PREPARE GRAPHHOPPER URLS (Rest of your code remains the same...)
+      const startPt = `${currentLocation.lat},${currentLocation.lng}`;
+      const endPt = `${dCoords.lat},${dCoords.lng}`
+      const commonParams = `&points_encoded=false&elevation=false&key=${GH_API_KEY}`;
+
+      // ROUTE A: THE "WILD" ROUTE (Parks/Woods/Gravel)
+      const wildUrl = `https://graphhopper.com/api/1/route?point=${startPt}&point=${endPt}&profile=foot&algorithm=alternative_route${commonParams}`;
+
+      // ROUTE B: THE "CITY" ROUTE (Asphalt/Roads)
+      const cityUrl = `https://graphhopper.com/api/1/route?point=${startPt}&point=${endPt}&profile=bike${commonParams}`;
+
+      // Fetch both simultaneously
+      const [wildRes, cityRes] = await Promise.all([
+          fetch(wildUrl).then(r => r.json()).catch(e => console.error(e)),
+          fetch(cityUrl).then(r => r.json()).catch(e => console.error(e))
+      ]);
+
+      let selectedPath = null;
+      let pathType = "";
+
+      if (!isWellLit) {
+          // === NON-SAFE MODE (Direct/Shortest) ===
+          if (wildRes && wildRes.paths && wildRes.paths.length > 0) {
+              selectedPath = wildRes.paths[0];
+              // Recalculate time for bike speed approx
+              selectedPath.time = (selectedPath.distance / 5.0) * 1000; 
+              pathType = "Most direct path";
+          } else {
+              selectedPath = cityRes.paths[0];
+              pathType = "Road (No off-road shortcut found)";
+          }
+      } else {
+          // === SAFE MODE (Lit/Roads) ===
+          if (cityRes && cityRes.paths && cityRes.paths.length > 0) {
+              selectedPath = cityRes.paths[0];
+              pathType = "City Infrastructure (Paved/Roads)";
+
+              // OPTIONAL: Run Lighting Score
+              const minLat = Math.min(currentLocation.lat, dCoords.lat) - 0.01;
+              const maxLat = Math.max(currentLocation.lat, dCoords.lat) + 0.01;
+              const minLng = Math.min(currentLocation.lng, dCoords.lng) - 0.01;
+              const maxLng = Math.max(currentLocation.lng, dCoords.lng) + 0.01;
+              
+              const query = `[out:json][timeout:5];(way["lit"="yes"](${minLat},${minLng},${maxLat},${maxLng});node["highway"="street_lamp"](${minLat},${minLng},${maxLat},${maxLng}););out center;`;
+              
+              fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query })
+                .then(r => r.json())
+                .then(data => {
+                   const coords = selectedPath.points.coordinates.map(c => [c[1], c[0]]);
+                   const score = calculateLightingScore(coords, data.elements || []);
+                   const normalized = score / (selectedPath.distance / 1000);
+                   setSafetyNote(`Safe Route Active. Lighting Score: ${normalized.toFixed(1)}`);
+                })
+                .catch(() => setSafetyNote("Safe Route Active (Lighting data unavailable)"));
+
+          } else {
+              selectedPath = wildRes.paths[0];
+              pathType = "Direct Path (Safe route unavailable)";
+          }
+      }
+
+      if (!selectedPath) {
+          alert("GraphHopper could not find a route. Check API Key.");
+          setIsCalculating(false);
+          return;
+      }
+
+      // 3. Update State
+      // GraphHopper GeoJSON is [lng, lat], Leaflet needs [lat, lng]
+      const leafletCoords = selectedPath.points.coordinates.map(c => [c[1], c[0]]);
+      setRouteCoords(leafletCoords);
+      
+      setRouteDistance((selectedPath.distance / 1000).toFixed(2));
+      setRouteDuration(Math.round(selectedPath.time / 60000)); 
+      
+      if (!isWellLit || !safetyNote) {
+          setSafetyNote(`${pathType}`);
+      }
+
+    } catch (e) { 
+        console.error(e); 
+        alert("Error fetching route. Did you add the API Key?");
+    } finally {
+        setIsCalculating(false);
     }
   };
-// 4. Dependency Array: The effect MUST re-run when these values change.
-}, [isSharing, tripId, user, currentLocation]);
 
+  // --- SHARING LOOP ---
+  useEffect(() => {
+    let interval;
+    if (isSharing && tripId && user) {
+      interval = setInterval(async () => {
+        try {
+          const tripRef = doc(db, 'active_trips', tripId);
+          await updateDoc(tripRef, {
+            lat: currentLocation.lat,
+            lng: currentLocation.lng,
+            lastUpdate: serverTimestamp(),
+            status: 'active'
+          });
+        } catch (e) { console.error("Error updating location:", e); }
+      }, 5000);
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [isSharing, tripId, user, currentLocation]);
 
-// WATCHER EFFECT - Listens to location updates
+  // --- WATCHER: LOCATION UPDATES ---
   useEffect(() => {
     if (viewMode === 'watcher' && tripId && user) {
       console.log("Connecting to DB for Trip:", tripId);
-
       const unsub = onSnapshot(doc(db, 'active_trips', tripId), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setWatchedLocation({ lat: data.lat, lng: data.lng });
-          
-          if (data.lastUpdate) {
-            setLastUpdate(data.lastUpdate.toMillis());
-          }
-        } else {
-          console.log("Document does not exist!");
+          if (data.lastUpdate) setLastUpdate(data.lastUpdate.toMillis());
         }
       });
       return () => unsub();
     }
   }, [viewMode, tripId, user]);
 
-  // ALARM CHECK EFFECT - Runs on fixed 30-second interval
-
+  // --- WATCHER: ALARM CHECK (30s Interval) ---
   useEffect(() => {
     if (viewMode === 'watcher' && tripId && lastUpdate > 0 && watchedLocation) {
-      console.log("Starting alarm check interval (every 30s)");
-      
       const checkAlarm = () => {
         const now = Date.now();
         const diff = now - lastUpdate;
         
-        // Check if rider is in a danger zone
         const isNearDanger = theftZones.some(zone => {
           const dist = Math.sqrt(
             Math.pow(zone.lat - watchedLocation.lat, 2) + 
             Math.pow(zone.lng - watchedLocation.lng, 2)
           );
-          
-       
-            
-          console.log(`Distance to Zone ${zone.id || '?'}: ${dist.toFixed(5)} (Threshold: 0.002)`);
-          
-          
-          return dist < 0.002;//ugf 200m
+          return dist < 0.002; // approx 200m
         });
         
-        console.log(`Time since last update: ${diff}ms (${(diff/1000).toFixed(0)}s)`);
-        console.log(`In Danger Zone? ${isNearDanger ? 'YES' : 'NO'}`);
-        
-        // Alert if in danger zone AND no update for 60 seconds (1 minute)
         const shouldTriggerAlert = diff > 60000 && isNearDanger;
-        
-        console.log(`ALERT STATUS: ${shouldTriggerAlert}`);
         setIsDangerAlert(shouldTriggerAlert);
       };
       
-      // Check immediately on mount
       checkAlarm();
-      
-      // Then check every 30 seconds
       const interval = setInterval(checkAlarm, 30000);
-      
       return () => clearInterval(interval);
     }
   }, [viewMode, tripId, lastUpdate, watchedLocation, theftZones]);
 
+  const openGoogleMaps = () => {
+     if(destination) {
+         window.open(`https://www.google.com/maps/dir/?api=1&destination=$${destination}&travelmode=bicycling`, '_blank');
+     }
+  };
 
   const handleMapClick = useCallback((pos) => {      
     setTempMarker(pos);
+    setIsSheetExpanded(true); // Expand sheet so they can see the "Confirm" button
   }, []);
 
   const submitReport = async () => {
@@ -334,7 +283,6 @@ useEffect(() => {
     if (reportMode === 'add_rack') coll = 'bike_racks';
     if (reportMode === 'add_repair') coll = 'repair_stations';
 
-    
     try {
         await addDoc(collection(db, coll), {
             lat: tempMarker.lat,
@@ -343,12 +291,11 @@ useEffect(() => {
             reporter: user.uid
         });
         setTempMarker(null);
-        // Using custom Modal for feedback instead of blocking alert()
+        setReportMode(null);
+        // Reset view to navigation or just close report mode
     } catch (e) {
         console.error("Error reporting:", e);
     }
-
-    setReportMode(null);
   };
 
   const startSharing = async () => {
@@ -361,108 +308,253 @@ useEffect(() => {
     setIsSharing(true);
   };
 
-  return (
-    <div className="flex flex-col h-screen bg-gray-900 text-white overflow-hidden font-sans">
-      <header className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between shadow-md z-20">
-        <div className="flex items-center gap-2">
-          <img src="/kindl-on-bike.png" alt="Bike" className="w-6 h-6" />
-          <h1 className="text-xl font-bold tracking-tight">M-<span className="text-blue-400">Radl</span></h1>
-        </div>
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="md:hidden p-2 hover:bg-gray-700 rounded-full"><Menu /></button>
-      </header>
+  const toggleSheet = () => setIsSheetExpanded(!isSheetExpanded);
 
-      <div className="flex flex-1 relative overflow-hidden">
-        <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform absolute md:relative z-10 w-80 h-full bg-gray-800 border-r border-gray-700 flex flex-col shadow-xl`}>
-             <div className="flex p-2 bg-gray-900 m-4 rounded-lg">
-                <button onClick={() => setViewMode('rider')} className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${viewMode === 'rider' ? 'bg-blue-600' : 'text-gray-400'}`}>Rider</button>
-                <button onClick={() => setViewMode('watcher')} className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${viewMode === 'watcher' ? 'bg-purple-600' : 'text-gray-400'}`}>Watcher</button>
-            </div>
+  return (
+    <div className="h-screen w-full bg-gray-900 text-white overflow-hidden font-sans relative flex flex-col">
+      
+      {/* --- 1. Full Screen Map Layer --- */}
+      <div className="absolute inset-0 z-0">
+         <LeafletMap 
+            center={currentLocation} zoom={zoom} 
+            theftZones={theftZones} bikeRacks={bikeRacks} repairStations={repairStations}
+            routeCoords={routeCoords} isWellLit={isWellLit} userPos={currentLocation}
+            watchedPos={watchedLocation} reportMode={reportMode}
+            onMapClick={handleMapClick} tempMarker={tempMarker}
+         />
+      </div>
+
+      {/* --- 2. Floating Top Bar (Branding Only) --- */}
+      <div className="absolute top-0 left-0 right-0 z-10 p-4 pointer-events-none flex justify-center">
+        <div className="bg-gray-800/90 backdrop-blur-md border border-gray-700 shadow-lg px-4 py-2 rounded-full flex items-center gap-2 pointer-events-auto">
+           <div className="bg-blue-600 p-1.5 rounded-full"><Bike size={18} /></div>
+           <h1 className="text-lg font-bold tracking-tight">M-<span className="text-blue-400">Radl</span></h1>
+        </div>
+      </div>
+
+      {/* --- 3. Sliding Bottom Sheet --- */}
+      <div 
+        className={`absolute bottom-0 left-0 right-0 z-20 bg-gray-800 border-t border-gray-700 rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.5)] transition-all duration-300 ease-in-out flex flex-col
+        ${isSheetExpanded ? 'h-[65%]' : 'h-24'}`}
+      >
+        {/* Sheet Header: Drag Handle & Menu */}
+        <div className="w-full flex items-center justify-between px-6 pt-3 pb-1 shrink-0 relative">
+           
+           {/* Empty div to balance the flex layout */}
+           <div className="w-10"></div> 
+
+           {/* Toggle Button (Handle) */}
+           <button 
+              onClick={toggleSheet} 
+              className="p-1 bg-gray-700 rounded-full hover:bg-gray-600 text-gray-300 transition-colors"
+           >
+              {isSheetExpanded ? <ChevronDown size={24}/> : <ChevronUp size={24}/>}
+           </button>
+
+           {/* Hamburger Menu (Top Right) */}
+           <div className="w-10 flex justify-end">
+              <OverflowMenu 
+                setCategory={(cat) => {
+                    setCategory(cat);
+                    setReportMode(null);
+                    setIsSheetExpanded(true); 
+                }} 
+                customTrigger={<MenuIcon size={24} className="text-gray-300" />}
+              />
+           </div>
+        </div>
+        
+
+        {/* Scrollable Content Area (Only visible when expanded) */}
+        <div className={`flex-1 overflow-y-auto px-6 pb-6 space-y-6 transition-opacity duration-300 ${isSheetExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
             
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar">
-                {viewMode === 'rider' ? (
-                   <div className="space-y-4">
-                      <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600 space-y-3">
-                         <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2"><Navigation size={16}/> Where to?</h3>
-                         <input className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                                placeholder="Destination" value={destination} onChange={e => setDestination(e.target.value)} />
-                         <div className="flex items-center justify-between bg-gray-800 p-3 rounded-lg border border-gray-600 cursor-pointer" onClick={() => setIsWellLit(!isWellLit)}>
-                            <div className="flex items-center gap-2">{isWellLit ? <Sun size={18} className="text-cyan-400"/> : <Moon size={18} className="text-gray-400"/>} <span className="text-sm">Safe Route</span></div>
-                            <div className={`w-10 h-5 rounded-full relative ${isWellLit ? 'bg-cyan-500' : 'bg-gray-600'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-transform ${isWellLit ? 'left-6' : 'left-1'}`}></div></div>
-                         </div>
-                         <button onClick={calculateRoute} disabled={isCalculating} className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium flex items-center justify-center gap-2">
-                             {isCalculating ? <Loader2 className="animate-spin" size={18}/> : "Find Route"}
-                         </button>
-                         {safetyNote && <div className="text-xs text-cyan-300 text-center px-2">{safetyNote}</div>}
+            {/* --- DYNAMIC CONTENT BASED ON CATEGORY --- */}
+            {category === 'navigation' && (
+              <>
+              <div className="px-6 pb-4 shrink-0">
+                <div className="flex p-1 bg-gray-900 rounded-xl">
+                  <button
+                    onClick={() => setViewMode('rider')}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      viewMode === 'rider' ? 'bg-blue-600 text-white' : 'text-gray-400'
+                    }`}
+                  >
+                    Rider
+                  </button>
+
+                  <button
+                    onClick={() => setViewMode('watcher')}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      viewMode === 'watcher' ? 'bg-purple-600 text-white' : 'text-gray-400'
+                    }`}
+                  >
+                    Watcher
+                  </button>
+              </div>
+            </div>
+                  <div className='w-full space-y-4'>
+                    {viewMode === 'rider' ? (
+                   <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      {/* Navigation Inputs */}
+                      <div className="bg-gray-700/30 p-4 rounded-2xl border border-gray-600/50 space-y-3">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2"><Navigation size={14}/> Destination</h3>
+                          <div className="flex gap-2">
+                             <input className="flex-1 bg-gray-900 border border-gray-600 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                    placeholder="Where to?" value={destination} onChange={e => setDestination(e.target.value)} />
+                          </div>
+                          
+                          <div className="flex items-center justify-between bg-gray-900 p-3 rounded-xl border border-gray-600/50" onClick={() => setIsWellLit(!isWellLit)}>
+                             <div className="flex items-center gap-3">
+                                 {isWellLit ? <Sun size={20} className="text-cyan-400"/> : <Moon size={20} className="text-gray-500"/>} 
+                                 <div className="flex flex-col">
+                                     <span className="text-sm font-medium">Safe Route</span>
+                                     <span className="text-xs text-gray-500">Prioritize well-lit streets</span>
+                                 </div>
+                             </div>
+                             <div className={`w-11 h-6 rounded-full relative transition-colors ${isWellLit ? 'bg-cyan-500' : 'bg-gray-700'}`}>
+                                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${isWellLit ? 'translate-x-6' : 'translate-x-1'}`}></div>
+                             </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                             <button onClick={calculateRoute} disabled={isCalculating} className="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
+                                {isCalculating ? <Loader2 className="animate-spin" size={18}/> : "Go"}
+                             </button>
+                             {routeDistance && (
+                                 <button onClick={openGoogleMaps} className="w-12 bg-gray-700 hover:bg-gray-600 rounded-xl flex items-center justify-center text-gray-300">
+                                     <ExternalLink size={18}/>
+                                 </button>
+                             )}
+                          </div>
+                          {safetyNote && <div className="text-xs text-center text-cyan-300 mt-1">{safetyNote}</div>}
+                          {routeDistance && <div className="text-xs text-center text-gray-400 mt-1">{routeDistance} km • {routeDuration} min</div>}
                       </div>
 
-                      <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600 space-y-3">
-                          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2"><Share2 size={16}/> Safety Share</h3>
+                      {/* Share Trip */}
+                      <div className="bg-gray-700/30 p-4 rounded-2xl border border-gray-600/50 space-y-3">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2"><Share2 size={14}/> Live Safety Share</h3>
                           {!isSharing ? (
-                              <button onClick={startSharing} className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-medium">Start Safe Trip</button>
+                              <button onClick={startSharing} className="w-full bg-green-600/20 border border-green-600 text-green-400 hover:bg-green-600/30 py-3 rounded-xl font-bold text-sm transition-colors">Start Sharing Location</button>
                           ) : (
-                              <div className="bg-green-900/30 border border-green-500/50 p-3 rounded-lg text-center">
-                                  <div className="text-2xl font-mono font-bold tracking-widest mb-2">{tripId}</div>
-                                  <button onClick={() => navigator.clipboard.writeText(tripId)} className="text-xs bg-gray-800 px-3 py-1 rounded flex items-center justify-center gap-2 mx-auto"><Copy size={12}/> Copy</button>
+                              <div className="bg-green-900/20 border border-green-500/50 p-4 rounded-xl text-center relative overflow-hidden">
+                                  <div className="text-3xl font-mono font-bold tracking-widest text-green-400 mb-2">{tripId}</div>
+                                  <div className="text-xs text-green-500/70 mb-3">Share this code with a watcher</div>
+                                  <button onClick={() => navigator.clipboard.writeText(tripId)} className="text-xs bg-gray-800 px-4 py-2 rounded-lg inline-flex items-center gap-2 hover:bg-gray-700"><Copy size={12}/> Copy Code</button>
                               </div>
                           )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                          <button onClick={() => setReportMode('report_theft')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 ${reportMode === 'report_theft' ? 'bg-red-500/20 border-red-500 text-red-400' : 'bg-gray-700/50 border-gray-600 text-gray-400'}`}>
-                             <AlertTriangle size={20}/> <span className="text-xs">Report Theft</span>
-                          </button>
-                          <button onClick={() => setReportMode('add_rack')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 ${reportMode === 'add_rack' ? 'bg-green-500/20 border-green-500 text-green-400' : 'bg-gray-700/50 border-gray-600 text-gray-400'}`}>
-                             <MapPin size={20}/> <span className="text-xs">Add bike rack</span>
-                          </button>
-                    
-                          <button onClick={() => setReportMode('add_repair')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 ${reportMode === 'add_repair' ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' : 'bg-gray-700/50 border-gray-600 text-gray-400'}`}>
-                             <Wrench size={20}/><span className="text-xs">Add repair station</span>
-                          </button>
-                      </div>
-
-                      {/* 1. ANWEISUNG: Nur anzeigen, wenn ein Modus aktiv ist, aber noch kein Marker gesetzt wurde. */}
-                      {reportMode && !tempMarker && (
-                        <div className="text-center text-xs text-yellow-400 animate-pulse mt-4">Tap map to confirm</div>
-                      )}
-                      
-                      {/* 2. ABSENDE-KNOPF: Nur anzeigen, wenn ein Marker UND ein Modus gesetzt sind. */}
-                      {tempMarker && reportMode && (
-                        <button 
-                          onClick={submitReport} 
-                          className="w-full bg-yellow-500 hover:bg-yellow-600 py-3 rounded-lg font-medium text-gray-900 mt-4 shadow-lg transition-colors"
-                        >
-                          ✅ Position Bestätigen & Melden
-                        </button>
-                      )}
-                      {reportMode && <div className="text-center text-xs text-yellow-400 animate-pulse">Tap map to confirm</div>}
-
                    </div>
                 ) : (
-                   <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600 space-y-3">
-                      <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2"><Eye size={16}/> Monitor Trip</h3>
-                      <input className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none uppercase tracking-widest"
-                             placeholder="TRIP ID" value={tripId} onChange={e => setTripId(e.target.value)} />
+                   /* Watcher Mode */
+                   <div className="bg-gray-700/30 p-4 rounded-2xl border border-gray-600/50 space-y-3 animate-in fade-in slide-in-from-bottom-4">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2"><Eye size={14}/> Monitor Rider</h3>
+                      <input className="w-full bg-gray-900 border border-gray-600 rounded-xl p-4 text-center text-lg font-mono tracking-widest focus:ring-2 focus:ring-purple-500 outline-none uppercase placeholder:text-gray-600 placeholder:text-sm placeholder:font-sans placeholder:tracking-normal"
+                             placeholder="Enter Trip ID" value={tripId} onChange={e => setTripId(e.target.value)} />
                       {watchedLocation && (
-                          <div className={`mt-4 p-4 rounded-lg border ${isDangerAlert ? 'bg-red-900/50 border-red-500 animate-pulse' : 'bg-gray-800 border-green-500'}`}>
-                              <span className="font-bold text-sm">{isDangerAlert ? 'POTENTIAL DANGER' : 'Rider Active'}</span>
-                              <p className="text-xs text-gray-400">{isDangerAlert ? "Rider stationary in high-risk zone!" : "Location updating..."}</p>
+                          <div className={`mt-4 p-4 rounded-xl border flex items-center gap-4 ${isDangerAlert ? 'bg-red-900/20 border-red-500' : 'bg-green-900/20 border-green-500'}`}>
+                              <div className={`p-2 rounded-full ${isDangerAlert ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}>
+                                  {isDangerAlert ? <AlertTriangle size={20} className="text-white"/> : <Bike size={20} className="text-white"/>}
+                              </div>
+                              <div>
+                                <span className={`font-bold text-sm block ${isDangerAlert ? 'text-red-400' : 'text-green-400'}`}>{isDangerAlert ? 'POTENTIAL DANGER' : 'Rider Active'}</span>
+                                <p className="text-xs text-gray-400">{isDangerAlert ? "Stationary in Red Zone" : "Location updating live"}</p>
+                              </div>
                           </div>
                       )}
                    </div>
                 )}
-            </div>
-        </aside>
+                  </div>
+              </>
+            )}
 
-        <main className="flex-1 relative bg-gray-900">
-             <LeafletMap 
-                center={currentLocation} zoom={zoom} theftZones={theftZones} bikeRacks={bikeRacks} repairStations={repairStations}
-                routeCoords={routeCoords} isWellLit={isWellLit} userPos={currentLocation}
-                watchedPos={watchedLocation} tempMarker={tempMarker} reportMode={reportMode}
-                onMapClick={handleMapClick}
-             />
-        </main>
+            {/* Report Category */}
+            {category === 'report' && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                    <div className="text-center pb-2">
+                        <h3 className="text-xl font-bold text-white">Reporting Tools</h3>
+                        <p className="text-xs text-gray-400">Help the community by reporting issues</p>
+                    </div>
 
+                    <div className="grid grid-cols-2 gap-4">
+                        <button onClick={() => { setReportMode('report_theft'); setIsSheetExpanded(false); }} 
+                            className={`h-32 rounded-2xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${reportMode === 'report_theft' ? 'bg-red-500/20 border-red-500 text-white scale-95' : 'bg-gray-700/30 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                          <div className="p-3 bg-red-500/20 rounded-full"><AlertTriangle size={32} className="text-red-500"/></div>
+                          <span className="text-sm font-medium">Report Theft</span>
+                        </button>
+                        <button onClick={() => { setReportMode('add_rack'); setIsSheetExpanded(false); }} 
+                            className={`h-32 rounded-2xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${reportMode === 'add_rack' ? 'bg-green-500/20 border-green-500 text-white scale-95' : 'bg-gray-700/30 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                          <div className="p-3 bg-green-500/20 rounded-full"><MapPin size={32} className="text-green-500"/></div>
+                          <span className="text-sm font-medium">Add Rack</span>
+                        </button>
+                        <button onClick={() => { setReportMode('add_repair'); setIsSheetExpanded(false); }} 
+                            className={`h-32 rounded-2xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${reportMode === 'add_repair' ? 'bg-yellow-500/20 border-yellow-500 text-white scale-95' : 'bg-gray-700/30 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                          <div className="p-3 bg-yellow-500/20 rounded-full"><Wrench size={32} className="text-yellow-500"/></div>
+                          <span className="text-sm font-medium">Add Repair Station</span>
+                        </button>
+                    </div>
+                    <p className="text-center text-xs text-gray-500 pt-4">Select an option to close this menu and tap the location on the map.</p>
+                    
+                    {/* CONFIRMATION BUTTON APPEARS HERE IF MARKER SET */}
+                    {tempMarker && (
+                        <div className="bg-gray-700 p-4 rounded-2xl border border-gray-600 mt-4">
+                             <p className="text-center text-white mb-2 text-sm">Location selected!</p>
+                             <button 
+                               onClick={submitReport} 
+                               className="w-full bg-yellow-500 hover:bg-yellow-600 py-3 rounded-lg font-bold text-gray-900 shadow-lg transition-colors"
+                             >
+                               ✅ Confirm & Submit
+                             </button>
+                             <button onClick={() => setTempMarker(null)} className="w-full text-xs text-gray-400 mt-2 underline">Cancel selection</button>
+                        </div>
+                    )}
+                  </div>
+            )}
+
+            {category === 'racks' && (
+                  <div className="text-center space-y-4 py-8">
+                    <div className="mx-auto w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center"><Bike size={32} className="text-gray-400"/></div>
+                    <h3 className="text-xl font-bold">Add bike rack</h3>
+                    <p className="text-gray-400 text-sm">Go to the "Report" menu to add a new rack.</p>
+                  </div>
+            )}
+
+            {category === 'emergency' && (
+                  <div className="space-y-4">
+                    <div className="bg-red-500/10 border border-red-500/50 rounded-2xl p-6 text-center space-y-4">
+                        <h3 className="text-2xl font-bold text-red-500">Emergency Contacts</h3>
+                        <div className="space-y-3 pt-2">
+                            <a href="tel:112" className="flex items-center justify-center w-full py-4 bg-red-600 text-white rounded-xl text-lg font-bold shadow-lg shadow-red-900/50 active:scale-95 transition-transform">
+                                Emergency call
+                            </a>
+                            <a href="tel:110" className="flex items-center justify-center w-full py-4 bg-gray-700 text-white rounded-xl text-lg font-bold active:scale-95 transition-transform">
+                                Police
+                            </a>
+                            <a href="tel:089 77 34 29" className="flex items-center justify-center w-full py-4 bg-gray-700 text-white rounded-xl text-lg font-bold active:scale-95 transition-transform">
+                                ADFC München
+                            </a>
+                        </div>
+                    </div>
+                  </div>
+            )}
+
+            {category === 'repair' && (
+                  <div className="text-center space-y-4 py-8">
+                    <div className="mx-auto w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center"><Wrench size={32} className="text-gray-400"/></div>
+                    <h3 className="text-xl font-bold">Add repair stations</h3>
+                    <p className="text-gray-400 text-sm">Go to the "Report" menu to add a new station.</p>
+                  </div>
+            )}
+        </div>
       </div>
+      
+      {/* Overlay for "Tap map" instruction */}
+      {reportMode && !tempMarker && !isSheetExpanded && (
+            <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 bg-yellow-500 text-black px-4 py-2 rounded-full font-bold text-sm shadow-lg animate-bounce pointer-events-none">
+                Tap map to set location
+            </div>
+      )}
+
     </div>
   );
 }
