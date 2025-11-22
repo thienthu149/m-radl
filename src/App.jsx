@@ -16,6 +16,7 @@ import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './config/firebase';
 import LeafletMap from './components/LeafletMap';
+import { Wrench } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -27,6 +28,7 @@ export default function App() {
   
   const [theftZones, setTheftZones] = useState([]);
   const [bikeRacks, setBikeRacks] = useState([]);
+  const [repairStations, setRepairStations] = useState([]);
   
   const [destination, setDestination] = useState('');
   const [routeCoords, setRouteCoords] = useState([]);
@@ -57,7 +59,10 @@ export default function App() {
     const unsubRacks = onSnapshot(collection(db, 'bike_racks'), (s) => 
       setBikeRacks(s.docs.map(d => ({ id: d.id, ...d.data() })))
     );
-    return () => { unsubThefts(); unsubRacks(); };
+    const unsubRepair = onSnapshot(collection(db, 'repair_stations'), (s) =>
+      setRepairStations(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+    return () => { unsubThefts(); unsubRacks(); unsubRepair();};
   }, [user]);
 
   useEffect(() => {
@@ -152,7 +157,12 @@ export default function App() {
 
   const submitReport = async () => {
     if (!selectedPos || !user) return;
-    const coll = reportMode === 'report_theft' ? 'theft_reports' : 'bike_racks';
+    let coll = null;
+
+    if (reportMode === 'report_theft') coll = 'theft_reports';
+    if (reportMode === 'add_rack') coll = 'bike_racks';
+    if (reportMode === 'add_repair') coll = 'repair_stations';
+
     
     try {
         await addDoc(collection(db, coll), {
@@ -235,7 +245,11 @@ export default function App() {
                              <AlertTriangle size={20}/> <span className="text-xs">Report Theft</span>
                           </button>
                           <button onClick={() => setReportMode('add_rack')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 ${reportMode === 'add_rack' ? 'bg-green-500/20 border-green-500 text-green-400' : 'bg-gray-700/50 border-gray-600 text-gray-400'}`}>
-                             <MapPin size={20}/> <span className="text-xs">Add Rack</span>
+                             <MapPin size={20}/> <span className="text-xs">Fahrradständer hinzufügen</span>
+                          </button>
+                    
+                          <button onClick={() => setReportMode('add_repair')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 ${reportMode === 'add_repair' ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' : 'bg-gray-700/50 border-gray-600 text-gray-400'}`}>
+                             <Wrench size={20}/><span className="text-xs">Reparaturstation hinzufügen</span>
                           </button>
                       </div>
                       {reportMode && <div className="text-center text-xs text-yellow-400 animate-pulse">Tap map to confirm</div>}
@@ -258,7 +272,7 @@ export default function App() {
 
         <main className="flex-1 relative bg-gray-900">
              <LeafletMap 
-                center={currentLocation} zoom={zoom} theftZones={theftZones} bikeRacks={bikeRacks}
+                center={currentLocation} zoom={zoom} theftZones={theftZones} bikeRacks={bikeRacks} repairStations={repairStations}
                 routeCoords={routeCoords} isWellLit={isWellLit} userPos={currentLocation}
                 watchedPos={watchedLocation} reportMode={reportMode}
                 onMapClick={handleMapClick}

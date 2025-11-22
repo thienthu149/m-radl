@@ -45,11 +45,12 @@ const RecenterMap = ({ center }) => {
     return null;
 }
 
-const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLit, userPos, watchedPos, reportMode, onMapClick }) => {
+const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, routeCoords, isWellLit, userPos, watchedPos, reportMode, onMapClick }) => {
     
     // SVG Strings
     const rackSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>';
     const userSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>';
+    const repairSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4l-9 9-3.6.6.6-3.6 9-9z"></path><path d="m16 5 3 3"></path></svg>';
 
     // --- CRITICAL FIX: "Ghost Mode" ---
     // When reportMode is active (not null), we set interactive to FALSE for all existing objects.
@@ -135,6 +136,18 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                     <Popup>Bike Rack</Popup>
                 </Marker>
             ))}
+            {/* Repair Stations */}
+            {repairStations.map((station) => (
+                <Marker 
+                    key={station.id}
+                    position={[station.lat, station.lng]}
+                    icon={createCustomIcon('#eab308', repairSvg)} // yellow-ish color
+                    interactive={isInteractive}
+                >
+                    <Popup>Reparaturstation</Popup>
+                </Marker>
+            ))}
+
         </MapContainer>
     );
 };
