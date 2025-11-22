@@ -47,10 +47,13 @@ const RecenterMap = ({ center }) => {
 
 const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLit, userPos, watchedPos, reportMode, onMapClick }) => {
     
+    // SVG Strings
     const rackSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>';
     const userSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>';
 
-    // When reportMode is active, allow clicks to pass to the map (background)
+    // --- CRITICAL FIX: "Ghost Mode" ---
+    // When reportMode is active (not null), we set interactive to FALSE for all existing objects.
+    // This lets your click pass through them to the map background.
     const isInteractive = reportMode === null;
 
     return (
@@ -77,36 +80,46 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
 
             {/* Route Visualization */}
             {routeCoords.length > 0 && (
-                <Polyline 
-                    positions={routeCoords} 
-                    color="#3b82f6"
-                    weight={5} 
-                    opacity={0.8} 
-                    interactive={false}
-                />
+                <>
+                    {/* Glow for Safe Route */}
+                    {isWellLit && (
+                        <Polyline 
+                            positions={routeCoords} 
+                            color="#3b82f6" // Cyan
+                            weight={12} 
+                            opacity={0.3} 
+                            interactive={false}
+                        />
+                    )}
+                    <Polyline 
+                        positions={routeCoords} 
+                        color= "#3b82f6" // Color cyan
+                        weight={5} 
+                        opacity={1} 
+                        interactive={false}
+                    />
+                </>
             )}
 
-            {/* --- THEFT ZONES (HEATMAP EFFECT) --- */}
-            {/* Logic: 
-                1. We render a Circle for EVERY report.
-                2. We set opacity very low (0.15).
-                3. Overlapping circles automatically darken the color (0.15 + 0.15 = 0.3, etc.)
-                4. No Stroke (border) ensures it looks like a cloud/overlay.
-                5. No Markers are rendered.
-            */}
+            {/* Theft Zones (Heatmap style) */}
             {theftZones.map((zone) => (
                 <Circle 
                     key={zone.id} 
                     center={[zone.lat, zone.lng]} 
-                    radius={200} 
+                    radius={300} // Increased radius for better visibility
                     pathOptions={{ 
                         color: 'red', 
-                        fillColor: '#ef4444', // Red-500
-                        fillOpacity: 0.15,     // Low opacity for stacking effect
-                        stroke: false          // No border = smoother gradient look
+                        fillColor: '#ef4444', 
+                        fillOpacity: 0.2, // Low opacity allows stacking to create "hotter" red
+                        stroke: false 
                     }}
-                    interactive={false} // Danger zones are visual warnings only, don't block clicks
-                />
+                    interactive={isInteractive}
+                >
+                    <Popup>
+                        <div className="text-red-500 font-bold">Danger Zone</div>
+                        <div className="text-xs text-gray-600">Theft reported here</div>
+                    </Popup>
+                </Circle>
             ))}
 
             {/* Bike Racks */}
