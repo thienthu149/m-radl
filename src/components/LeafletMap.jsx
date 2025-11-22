@@ -25,16 +25,18 @@ const createCustomIcon = (color, svgString) => new L.DivIcon({
 });
 
 // Stable Click Handler
-const MapClickHandler = ({ onMapClick, mode }) => {
+const MapClickHandler = ({ onMapClick, reportMode }) => {
     useMapEvents({
         click: (e) => {
-            if (mode) {
+            if (reportMode) {
+                e.originalEvent.stopPropagation();
                 onMapClick(e.latlng);
             }
         },
     });
     return null;
 };
+
 
 // Helper to Recenter Map
 const RecenterMap = ({ center }) => {
@@ -45,11 +47,12 @@ const RecenterMap = ({ center }) => {
     return null;
 }
 
-const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLit, userPos, watchedPos, reportMode, onMapClick }) => {
+const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, routeCoords, isWellLit, userPos, watchedPos, reportMode, onMapClick, tempMarker}) => {
     
     // SVG Strings
     const rackSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>';
     const userSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>';
+    const repairSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4l-9 9-3.6.6.6-3.6 9-9z"></path><path d="m16 5 3 3"></path></svg>';
 
     // --- CRITICAL FIX: "Ghost Mode" ---
     // When reportMode is active (not null), we set interactive to FALSE for all existing objects.
@@ -59,12 +62,20 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
     return (
         <MapContainer center={[center.lat, center.lng]} zoom={zoom} style={{ height: "100%", width: "100%", background: '#111827' }}>
             <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                attribution='© <a href="https://www.openstreetmap.org/copyright">OSM</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                
-            />// now in light mode mode tile adjustment
-            
-            <MapClickHandler onMapClick={onMapClick} mode={reportMode} />
+            />
+
+            {tempMarker && (
+                <Marker 
+                     position={[tempMarker.lat, tempMarker.lng]} 
+                    icon={createCustomIcon('#facc15', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>')} 
+                    interactive={false}
+                >
+                    <Popup>New Marker</Popup>
+                </Marker>
+            )}
+
             <RecenterMap center={watchedPos ? [watchedPos.lat, watchedPos.lng] : null} />
 
             {/* Current User */}
@@ -86,7 +97,7 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                     {isWellLit && (
                         <Polyline 
                             positions={routeCoords} 
-                            color="#22d3ee" // Cyan
+                            color="#3b82f6" // Cyan
                             weight={12} 
                             opacity={0.3} 
                             interactive={false}
@@ -94,10 +105,9 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                     )}
                     <Polyline 
                         positions={routeCoords} 
-                        color={isWellLit ? "#22d3ee" : "#ef4444"} // Cyan vs Red
+                        color= "#3b82f6" // Color cyan
                         weight={5} 
                         opacity={1} 
-                        dashArray={isWellLit ? null : '10, 10'} 
                         interactive={false}
                     />
                 </>
@@ -115,7 +125,7 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                         fillOpacity: 0.2, // Low opacity allows stacking to create "hotter" red
                         stroke: false 
                     }}
-                    interactive={isInteractive} 
+                    interactive={isInteractive}
                 >
                     <Popup>
                         <div className="text-red-500 font-bold">Danger Zone</div>
@@ -135,6 +145,20 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                     <Popup>Bike Rack</Popup>
                 </Marker>
             ))}
+            {/* Repair Stations */}
+            {repairStations.map((station) => (
+                <Marker 
+                    key={station.id}
+                    position={[station.lat, station.lng]}
+                    icon={createCustomIcon('#eab308', repairSvg)} // yellow-ish color
+                    interactive={isInteractive}
+                >
+                    <Popup>Reparaturstation</Popup>
+                </Marker>
+            ))}
+
+            <MapClickHandler onMapClick={onMapClick} reportMode={reportMode} />
+
         </MapContainer>
     );
 };

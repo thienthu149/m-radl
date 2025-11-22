@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* Leaflet Dark Mode Override */
-/*to use dark mode: in leafletMap MapContainer center class = "map-tiles-dark"*/
+/* to use dark mode: in leafletMap MapContainer center class = "map-tiles-dark" */
 .map-tiles-dark {
     filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
 }
