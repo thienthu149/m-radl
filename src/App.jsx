@@ -6,6 +6,7 @@ import { auth, db } from './config/firebase';
 import LeafletMap from './components/LeafletMap';
 import OverflowMenu from './components/Menu';
 
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [viewMode, setViewMode] = useState('rider'); 
