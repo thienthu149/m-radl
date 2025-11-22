@@ -6,7 +6,7 @@
   // Why is my live location in the city center?
   // Open in Google Maps
   // Monitoring functionality check that it works (1. it shows actual rider correctly. 2. danger alert triggers correctly)
-
+//TODO: zu lange in theft zone stehen ist eigentlich egal
 
   // EXTRAs:
   // "Where to" input autofill suggestions
@@ -92,7 +92,10 @@ export default function App() {
                const dist = Math.sqrt(Math.pow(zone.lat - data.lat, 2) + Math.pow(zone.lng - data.lng, 2));
                return dist < 0.002; 
             });
-            setIsDangerAlert(diff > 60000 && isNearDanger);
+            
+            const shouldTriggerAlert = diff > 300000 && isNearDanger;
+            setIsDangerAlert(shouldTriggerAlert);
+            
           }
         }
       });
