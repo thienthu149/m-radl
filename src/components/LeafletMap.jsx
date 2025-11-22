@@ -61,8 +61,8 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
             <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                className="map-tiles-dark"
-            />
+                
+            />// now in light mode mode tile adjustment
             
             <MapClickHandler onMapClick={onMapClick} mode={reportMode} />
             <RecenterMap center={watchedPos ? [watchedPos.lat, watchedPos.lng] : null} />
