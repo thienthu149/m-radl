@@ -351,7 +351,7 @@ export default function App() {
                   <div className="text-center space-y-4 py-8">
                     <div className="mx-auto w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center"><Bike size={32} className="text-gray-400"/></div>
                     <h3 className="text-xl font-bold">Add bike rack</h3>
-                    <p className="text-gray-400 text-sm">Bike racks and repair stations are automatically shown on your map.</p>
+                    <p className="text-gray-400 text-sm">Bike racks are automatically shown on your map.</p>
                   </div>
             )}
 
@@ -375,19 +375,11 @@ export default function App() {
             )}
 
             {category === 'repair' && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-bold">Settings</h3>
-                    <div className="bg-gray-700/30 rounded-xl overflow-hidden">
-                        <div className="p-4 flex items-center justify-between border-b border-gray-600">
-                            <span className="text-sm">Always use Safe Route</span>
-                            <div className="w-10 h-5 bg-cyan-500 rounded-full relative"><div className="absolute right-1 top-1 w-3 h-3 bg-white rounded-full"></div></div>
-                        </div>
-                        <div className="p-4 flex items-center justify-between">
-                            <span className="text-sm">Notifications</span>
-                            <div className="w-10 h-5 bg-gray-600 rounded-full relative"><div className="absolute left-1 top-1 w-3 h-3 bg-white rounded-full"></div></div>
-                        </div>
-                    </div>
-                 </div>
+                  <div className="text-center space-y-4 py-8">
+                    <div className="mx-auto w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center"><Bike size={32} className="text-gray-400"/></div>
+                    <h3 className="text-xl font-bold">Add repair stations</h3>
+                    <p className="text-gray-400 text-sm">Repair stations are automatically shown on your map.</p>
+                  </div>
             )}
         </div>
       </div>
