@@ -94,10 +94,9 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                     )}
                     <Polyline 
                         positions={routeCoords} 
-                        color={isWellLit ? "#22d3ee" : "#ef4444"} // Cyan vs Red
+                        color= "#22d3ee" // Color cyan
                         weight={5} 
                         opacity={1} 
-                        dashArray={isWellLit ? null : '10, 10'} 
                         interactive={false}
                     />
                 </>
@@ -115,7 +114,7 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                         fillOpacity: 0.2, // Low opacity allows stacking to create "hotter" red
                         stroke: false 
                     }}
-                    interactive={isInteractive} 
+                    interactive={isInteractive}
                 >
                     <Popup>
                         <div className="text-red-500 font-bold">Danger Zone</div>
