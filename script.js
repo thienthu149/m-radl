@@ -187,15 +187,45 @@ function initMap() {
                             iconSize: [30, 30]
                         })
                     }).addTo(map).bindPopup('Dein Standort').openPopup();
+                    
+                    showToast('Standort erfolgreich ermittelt', 'success');
                 },
                 function(error) {
-                    alert('Standort konnte nicht ermittelt werden. Bitte erlaube Standortzugriff.');
+                    showToast('Standort konnte nicht ermittelt werden. Bitte erlaube Standortzugriff.', 'error');
                 }
             );
         } else {
-            alert('Geolocation wird von deinem Browser nicht unterstützt.');
+            showToast('Geolocation wird von deinem Browser nicht unterstützt.', 'error');
         }
     });
+}
+
+// Toast notification helper
+function showToast(message, type = 'info') {
+    // Remove existing toast if any
+    const existingToast = document.querySelector('.toast');
+    if (existingToast) {
+        existingToast.remove();
+    }
+    
+    // Create new toast
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    // Show toast
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+    
+    // Hide and remove toast after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 3000);
 }
 
 // Weather API Integration
@@ -298,36 +328,4 @@ function displayWeather(data) {
         </div>
     `;
     
-    // Add additional CSS for cycling condition
-    const style = document.createElement('style');
-    style.textContent = `
-        .cycling-condition {
-            margin-top: 1rem;
-            padding: 0.5rem 1rem;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-        .condition-good {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .condition-moderate {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-        .condition-bad {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        .btn.active {
-            background-color: #00994d;
-        }
-        .custom-icon {
-            text-align: center;
-            font-size: 24px;
-            background: none;
-            border: none;
-        }
-    `;
-    document.head.appendChild(style);
 }

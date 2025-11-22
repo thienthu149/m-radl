@@ -581,11 +581,75 @@ button:focus {
     outline-offset: 2px;
 }
 
+/* Weather Condition Styles */
+.cycling-condition {
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+.condition-good {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.condition-moderate {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.condition-bad {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* Map Icon Styles */
+.custom-icon {
+    text-align: center;
+    font-size: 24px;
+    background: none;
+    border: none;
+}
+
+.btn.active {
+    background-color: #00994d;
+}
+
+/* Toast Notification */
+.toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--dark-text);
+    color: var(--white);
+    padding: 1rem 2rem;
+    border-radius: 5px;
+    box-shadow: var(--shadow-hover);
+    z-index: 2000;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.toast.show {
+    opacity: 1;
+}
+
+.toast.error {
+    background-color: var(--danger-color);
+}
+
+.toast.success {
+    background-color: var(--secondary-color);
+}
+
 /* Print Styles */
 @media print {
     .navbar,
     .menu-toggle,
-    .map-controls {
+    .map-controls,
+    .toast {
         display: none;
     }
 
