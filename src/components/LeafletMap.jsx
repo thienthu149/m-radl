@@ -23,15 +23,20 @@ const createCustomIcon = (color, svgString, size=32) => new L.DivIcon({
   popupAnchor: [0, -size]
 });
 
-const MapClickHandler = ({ onMapClick, mode }) => {
+// Stable Click Handler
+const MapClickHandler = ({ onMapClick, reportMode }) => {
     useMapEvents({
         click: (e) => {
-            if (mode) onMapClick(e.latlng);
+            if (reportMode) {
+                e.originalEvent.stopPropagation();
+                onMapClick(e.latlng);
+            }
         },
     });
     return null;
 };
 
+// Helper to Recenter Map
 const RecenterMap = ({ center }) => {
     const map = useMap();
     useEffect(() => {
@@ -49,24 +54,34 @@ const MapResizer = () => {
     return null;
 };
 
-const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLit, userPos, watchedPos, reportMode, onMapClick }) => {
+const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, routeCoords, isWellLit, userPos, watchedPos, reportMode, onMapClick, tempMarker }) => {
     
     const rackSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>';
-    const userSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>';
+    const userSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>';
+    const repairSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4l-9 9-3.6.6.6-3.6 9-9z"></path><path d="m16 5 3 3"></path></svg>';
 
     const isInteractive = reportMode === null;
 
     return (
         <MapContainer center={[center.lat, center.lng]} zoom={zoom} zoomControl={false} style={{ height: "100%", width: "100%", background: '#111827' }}>
             <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                attribution='© <a href="https://www.openstreetmap.org/copyright">OSM</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                // Ensure you have CSS to invert colors if you want dark mode tiles
             />
             
             <MapResizer />
-            <MapClickHandler onMapClick={onMapClick} mode={reportMode} />
+            <MapClickHandler onMapClick={onMapClick} reportMode={reportMode} />
             <RecenterMap center={watchedPos ? [watchedPos.lat, watchedPos.lng] : null} />
+
+            {tempMarker && (
+                <Marker 
+                     position={[tempMarker.lat, tempMarker.lng]} 
+                     icon={createCustomIcon('#facc15', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>')} 
+                     interactive={false}
+                >
+                    <Popup>Confirm Location</Popup>
+                </Marker>
+            )}
 
             {/* Current User - Slightly larger icon */}
             <Marker position={[userPos.lat, userPos.lng]} icon={createCustomIcon('#3b82f6', userSvg, 40)} interactive={isInteractive}>
@@ -84,7 +99,7 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                     {isWellLit && (
                         <Polyline 
                             positions={routeCoords} 
-                            color="#22d3ee" 
+                            color="#3b82f6" 
                             weight={12} 
                             opacity={0.3} 
                             interactive={false}
@@ -95,7 +110,6 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                         color={isWellLit ? "#22d3ee" : "#ef4444"} 
                         weight={5} 
                         opacity={1} 
-                        dashArray={isWellLit ? null : '10, 10'} 
                         interactive={false}
                     />
                 </>
@@ -106,9 +120,19 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                     key={zone.id} 
                     center={[zone.lat, zone.lng]} 
                     radius={300} 
-                    pathOptions={{ color: 'red', fillColor: '#ef4444', fillOpacity: 0.2, stroke: false }}
-                    interactive={isInteractive} 
-                />
+                    pathOptions={{ 
+                        color: 'red', 
+                        fillColor: '#ef4444', 
+                        fillOpacity: 0.2, 
+                        stroke: false 
+                    }}
+                    interactive={isInteractive}
+                >
+                    <Popup>
+                        <div className="text-red-500 font-bold">Danger Zone</div>
+                        <div className="text-xs text-gray-600">Theft reported here</div>
+                    </Popup>
+                </Circle>
             ))}
 
             {bikeRacks.map((rack) => (
@@ -119,6 +143,18 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, routeCoords, isWellLi
                     interactive={isInteractive} 
                 />
             ))}
+
+            {repairStations.map((station) => (
+                <Marker 
+                    key={station.id}
+                    position={[station.lat, station.lng]}
+                    icon={createCustomIcon('#eab308', repairSvg)} // yellow-ish color
+                    interactive={isInteractive}
+                >
+                    <Popup>Reparaturstation</Popup>
+                </Marker>
+            ))}
+
         </MapContainer>
     );
 };

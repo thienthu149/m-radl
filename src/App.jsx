@@ -1,11 +1,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Navigation, AlertTriangle, Bike, Share2, Eye, Menu as MenuIcon, X, Sun, Moon, Copy, ChevronUp, ChevronDown, MapPin, ExternalLink } from 'lucide-react';
+import { Navigation, AlertTriangle, Bike, Share2, Eye, Menu as MenuIcon, X, Sun, Moon, Copy, ChevronUp, ChevronDown, MapPin, ExternalLink, Wrench, Loader2 } from 'lucide-react';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './config/firebase';
 import LeafletMap from './components/LeafletMap';
 import OverflowMenu from './components/Menu';
 
+// --- OVERPASS API UTILS ---
+const calculateLightingScore = (routeCoords, litElements) => {
+    let litPoints = 0;
+    const threshold = 0.0004; // Approx 40m tolerance
+
+    // Check every 10th point for performance
+    for (let i = 0; i < routeCoords.length; i += 10) { 
+        const [lat, lng] = routeCoords[i];
+        const isLit = litElements.some(el => {
+            const elLat = el.lat || el.center?.lat;
+            const elLng = el.lon || el.center?.lon;
+            if (!elLat || !elLng) return false;
+            return Math.abs(lat - elLat) < threshold && Math.abs(lng - elLng) < threshold;
+        });
+        if (isLit) litPoints++;
+    }
+    return litPoints;
+};
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -13,45 +31,181 @@ export default function App() {
   const [isSheetExpanded, setIsSheetExpanded] = useState(false); // Controls bottom sheet height
   const [category, setCategory] = useState('navigation');
   
+  // Map & Data State
   const [currentLocation, setCurrentLocation] = useState({ lat: 48.1351, lng: 11.5820 });
   const [zoom, setZoom] = useState(13);
-  
   const [theftZones, setTheftZones] = useState([]);
   const [bikeRacks, setBikeRacks] = useState([]);
+  const [repairStations, setRepairStations] = useState([]);
   
+  // Routing State
   const [destination, setDestination] = useState('');
   const [routeCoords, setRouteCoords] = useState([]);
   const [isWellLit, setIsWellLit] = useState(true);
   const [routeDistance, setRouteDistance] = useState(null);
   const [routeDuration, setRouteDuration] = useState(null);
+  const [destCoords, setDestCoords] = useState(null);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [safetyNote, setSafetyNote] = useState(null);
 
+  // Sharing State
   const [tripId, setTripId] = useState('');
   const [isSharing, setIsSharing] = useState(false);
   const [watchedLocation, setWatchedLocation] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(0);
   const [isDangerAlert, setIsDangerAlert] = useState(false);
   
+  // UI State
   const [reportMode, setReportMode] = useState(null); 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedPos, setSelectedPos] = useState(null);
+  const [tempMarker, setTempMarker] = useState(null);
 
+  // --- INIT & AUTH ---
   useEffect(() => {
     signInAnonymously(auth);
-    return onAuthStateChanged(auth, setUser);
+    const unsubAuth = onAuthStateChanged(auth, setUser);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => console.error("GPS Error:", err),
+        { enableHighAccuracy: true }
+      );
+    }
+    return unsubAuth;
   }, []);
 
+  // --- FIRESTORE LISTENERS ---
   useEffect(() => {
     if (!user) return;
-    const unsubThefts = onSnapshot(collection(db, 'theft_reports'), (s) => 
+    const unsubThefts = onSnapshot(collection(db, 'theft_reports'), (s) => {
+      //the database has no theft zones yet, so we use hardcoded test zones for now
+      const realZones = s.docs.map(d => ({ id: d.id, ...d.data() }));
       setTheftZones(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
+    });
     const unsubRacks = onSnapshot(collection(db, 'bike_racks'), (s) => 
       setBikeRacks(s.docs.map(d => ({ id: d.id, ...d.data() })))
     );
-    return () => { unsubThefts(); unsubRacks(); };
+    const unsubRepair = onSnapshot(collection(db, 'repair_stations'), (s) =>
+      setRepairStations(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+    return () => { unsubThefts(); unsubRacks(); unsubRepair();};
   }, [user]);
 
-  // ... (Keeping existing trip sharing logic same as before)
+  // --- ROUTING ENGINE (GraphHopper Version) ---
+  // --- ROUTING ENGINE (GraphHopper Version) ---
+  const calculateRoute = async () => {
+    if (!destination) return;
+    setIsCalculating(true);
+    setSafetyNote(null);
+    setIsSheetExpanded(false); 
+    
+    const GH_API_KEY = import.meta.env.VITE_GH_API_KEY
+
+    try {
+      // 1. Geocode (SWITCHED TO GRAPHHOPPER TO FIX CORS/403 ERROR)
+      const geoRes = await fetch(`https://graphhopper.com/api/1/geocode?q=${destination}, Munich&locale=en&debug=true&key=${GH_API_KEY}`);
+      const geoData = await geoRes.json();
+
+      // GraphHopper returns results in a "hits" array
+      if (!geoData.hits || geoData.hits.length === 0) { 
+          alert("Location not found"); 
+          setIsCalculating(false); 
+          return; 
+      }
+      
+      // GraphHopper structure is slightly different than Nominatim
+      const hit = geoData.hits[0];
+      const dCoords = { lat: hit.point.lat, lng: hit.point.lng };
+      
+      setDestCoords(dCoords);
+
+      // 2. PREPARE GRAPHHOPPER URLS (Rest of your code remains the same...)
+      const startPt = `${currentLocation.lat},${currentLocation.lng}`;
+      const endPt = `${dCoords.lat},${dCoords.lng}`
+      const commonParams = `&points_encoded=false&elevation=false&key=${GH_API_KEY}`;
+
+      // ROUTE A: THE "WILD" ROUTE (Parks/Woods/Gravel)
+      const wildUrl = `https://graphhopper.com/api/1/route?point=${startPt}&point=${endPt}&profile=foot&algorithm=alternative_route${commonParams}`;
+
+      // ROUTE B: THE "CITY" ROUTE (Asphalt/Roads)
+      const cityUrl = `https://graphhopper.com/api/1/route?point=${startPt}&point=${endPt}&profile=bike${commonParams}`;
+
+      // Fetch both simultaneously
+      const [wildRes, cityRes] = await Promise.all([
+          fetch(wildUrl).then(r => r.json()).catch(e => console.error(e)),
+          fetch(cityUrl).then(r => r.json()).catch(e => console.error(e))
+      ]);
+
+      let selectedPath = null;
+      let pathType = "";
+
+      if (!isWellLit) {
+          // === NON-SAFE MODE (Direct/Shortest) ===
+          if (wildRes && wildRes.paths && wildRes.paths.length > 0) {
+              selectedPath = wildRes.paths[0];
+              // Recalculate time for bike speed approx
+              selectedPath.time = (selectedPath.distance / 5.0) * 1000; 
+              pathType = "Most direct path";
+          } else {
+              selectedPath = cityRes.paths[0];
+              pathType = "Road (No off-road shortcut found)";
+          }
+      } else {
+          // === SAFE MODE (Lit/Roads) ===
+          if (cityRes && cityRes.paths && cityRes.paths.length > 0) {
+              selectedPath = cityRes.paths[0];
+              pathType = "City Infrastructure (Paved/Roads)";
+
+              // OPTIONAL: Run Lighting Score
+              const minLat = Math.min(currentLocation.lat, dCoords.lat) - 0.01;
+              const maxLat = Math.max(currentLocation.lat, dCoords.lat) + 0.01;
+              const minLng = Math.min(currentLocation.lng, dCoords.lng) - 0.01;
+              const maxLng = Math.max(currentLocation.lng, dCoords.lng) + 0.01;
+              
+              const query = `[out:json][timeout:5];(way["lit"="yes"](${minLat},${minLng},${maxLat},${maxLng});node["highway"="street_lamp"](${minLat},${minLng},${maxLat},${maxLng}););out center;`;
+              
+              fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query })
+                .then(r => r.json())
+                .then(data => {
+                   const coords = selectedPath.points.coordinates.map(c => [c[1], c[0]]);
+                   const score = calculateLightingScore(coords, data.elements || []);
+                   const normalized = score / (selectedPath.distance / 1000);
+                   setSafetyNote(`Safe Route Active. Lighting Score: ${normalized.toFixed(1)}`);
+                })
+                .catch(() => setSafetyNote("Safe Route Active (Lighting data unavailable)"));
+
+          } else {
+              selectedPath = wildRes.paths[0];
+              pathType = "Direct Path (Safe route unavailable)";
+          }
+      }
+
+      if (!selectedPath) {
+          alert("GraphHopper could not find a route. Check API Key.");
+          setIsCalculating(false);
+          return;
+      }
+
+      // 3. Update State
+      // GraphHopper GeoJSON is [lng, lat], Leaflet needs [lat, lng]
+      const leafletCoords = selectedPath.points.coordinates.map(c => [c[1], c[0]]);
+      setRouteCoords(leafletCoords);
+      
+      setRouteDistance((selectedPath.distance / 1000).toFixed(2));
+      setRouteDuration(Math.round(selectedPath.time / 60000)); 
+      
+      if (!isWellLit || !safetyNote) {
+          setSafetyNote(`${pathType}`);
+      }
+
+    } catch (e) { 
+        console.error(e); 
+        alert("Error fetching route. Did you add the API Key?");
+    } finally {
+        setIsCalculating(false);
+    }
+  };
+
+  // --- SHARING LOOP ---
   useEffect(() => {
     let interval;
     if (isSharing && tripId && user) {
@@ -64,106 +218,96 @@ export default function App() {
             lastUpdate: serverTimestamp(),
             status: 'active'
           });
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Error updating location:", e); }
       }, 5000);
     }
-    return () => clearInterval(interval);
-  }, [isSharing, tripId, currentLocation, user]);
+    return () => { if (interval) clearInterval(interval); };
+  }, [isSharing, tripId, user, currentLocation]);
 
+  // --- WATCHER: LOCATION UPDATES ---
   useEffect(() => {
     if (viewMode === 'watcher' && tripId && user) {
+      console.log("Connecting to DB for Trip:", tripId);
       const unsub = onSnapshot(doc(db, 'active_trips', tripId), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setWatchedLocation({ lat: data.lat, lng: data.lng });
-          if (data.lastUpdate) {
-            const diff = Date.now() - data.lastUpdate.toMillis();
-            setLastUpdate(data.lastUpdate.toMillis());
-            const isNearDanger = theftZones.some(zone => {
-               const dist = Math.sqrt(Math.pow(zone.lat - data.lat, 2) + Math.pow(zone.lng - data.lng, 2));
-               return dist < 0.002; 
-            });
-            setIsDangerAlert(diff > 60000 && isNearDanger);
-          }
+          if (data.lastUpdate) setLastUpdate(data.lastUpdate.toMillis());
         }
       });
       return () => unsub();
     }
-  }, [viewMode, tripId, user, theftZones]);
+  }, [viewMode, tripId, user]);
 
-  const calculateRoute = async () => {
-    if (!destination) return;
-    setIsSheetExpanded(false); // Collapse sheet to see map after searching
-    try {
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${destination}, Munich`);
-      const geoData = await geoRes.json();
-      if (!geoData.length) { alert("Location not found"); return; }
+  // --- WATCHER: ALARM CHECK (30s Interval) ---
+  useEffect(() => {
+    if (viewMode === 'watcher' && tripId && lastUpdate > 0 && watchedLocation) {
+      const checkAlarm = () => {
+        const now = Date.now();
+        const diff = now - lastUpdate;
+        
+        const isNearDanger = theftZones.some(zone => {
+          const dist = Math.sqrt(
+            Math.pow(zone.lat - watchedLocation.lat, 2) + 
+            Math.pow(zone.lng - watchedLocation.lng, 2)
+          );
+          return dist < 0.002; // approx 200m
+        });
+        
+        const shouldTriggerAlert = diff > 60000 && isNearDanger;
+        setIsDangerAlert(shouldTriggerAlert);
+      };
       
-      const dest = { lat: parseFloat(geoData[0].lat), lng: parseFloat(geoData[0].lon) };
-      let startLng = currentLocation.lng;
-      let startLat = currentLocation.lat;
-      
-      if (isWellLit) { startLng += 0.0002; startLat += 0.0002; } // Jitter for safe route
-
-      const res = await fetch(`https://router.project-osrm.org/route/v1/bicycle/${startLng},${startLat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&alternatives=true`);
-      const data = await res.json();
-      
-      if (data.routes && data.routes.length > 0) {
-        let selectedRoute = data.routes[0];
-        if (isWellLit && data.routes.length > 1) {
-            const longestRoute = data.routes.reduce((prev, current) => (prev.distance > current.distance) ? prev : current);
-            if (longestRoute.distance > data.routes[0].distance * 1.05) {
-                selectedRoute = longestRoute;
-            }
-        }
-        setRouteCoords(selectedRoute.geometry.coordinates.map(c => [c[1], c[0]]));
-        setRouteDistance((selectedRoute.distance / 1000).toFixed(1));
-        setRouteDuration(Math.round(selectedRoute.duration / 60));
-      }
-    } catch (e) { console.error(e); }
-  };
+      checkAlarm();
+      const interval = setInterval(checkAlarm, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [viewMode, tripId, lastUpdate, watchedLocation, theftZones]);
 
   const openGoogleMaps = () => {
      if(destination) {
-         window.open(`https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=bicycling`, '_blank');
+         window.open(`https://www.google.com/maps/dir/?api=1&destination=$${destination}&travelmode=bicycling`, '_blank');
      }
   };
 
-  const handleMapClick = useCallback((pos) => {
-    setSelectedPos(pos);
-    setModalOpen(true);
+  const handleMapClick = useCallback((pos) => {      
+    setTempMarker(pos);
+    setIsSheetExpanded(true); // Expand sheet so they can see the "Confirm" button
   }, []);
 
   const submitReport = async () => {
-    if (!selectedPos || !user) return;
-    const coll = reportMode === 'report_theft' ? 'theft_reports' : 'bike_racks';
+    if (!tempMarker || !user) return;
+    let coll = null;
+
+    if (reportMode === 'report_theft') coll = 'theft_reports';
+    if (reportMode === 'add_rack') coll = 'bike_racks';
+    if (reportMode === 'add_repair') coll = 'repair_stations';
+
     try {
         await addDoc(collection(db, coll), {
-            lat: selectedPos.lat,
-            lng: selectedPos.lng,
+            lat: tempMarker.lat,
+            lng: tempMarker.lng,
             reportedAt: serverTimestamp(),
             reporter: user.uid
         });
-    } catch (e) { console.error("Error reporting:", e); }
-    setModalOpen(false);
-    setReportMode(null);
-    setSelectedPos(null);
+        setTempMarker(null);
+        setReportMode(null);
+        // Reset view to navigation or just close report mode
+    } catch (e) {
+        console.error("Error reporting:", e);
+    }
   };
 
   const startSharing = async () => {
     if (!user) return;
     const newId = Math.random().toString(36).substring(2, 8).toUpperCase();
     await setDoc(doc(db, 'active_trips', newId), {
-       lat: currentLocation.lat,
-       lng: currentLocation.lng,
-       startedAt: serverTimestamp(),
-       status: 'active'
+       lat: currentLocation.lat, lng: currentLocation.lng, startedAt: serverTimestamp(),lastUpdate: serverTimestamp(), status: 'active'
     });
     setTripId(newId);
     setIsSharing(true);
   };
 
-  // Helper to toggle bottom sheet
   const toggleSheet = () => setIsSheetExpanded(!isSheetExpanded);
 
   return (
@@ -172,10 +316,11 @@ export default function App() {
       {/* --- 1. Full Screen Map Layer --- */}
       <div className="absolute inset-0 z-0">
          <LeafletMap 
-            center={currentLocation} zoom={zoom} theftZones={theftZones} bikeRacks={bikeRacks}
+            center={currentLocation} zoom={zoom} 
+            theftZones={theftZones} bikeRacks={bikeRacks} repairStations={repairStations}
             routeCoords={routeCoords} isWellLit={isWellLit} userPos={currentLocation}
             watchedPos={watchedLocation} reportMode={reportMode}
-            onMapClick={handleMapClick}
+            onMapClick={handleMapClick} tempMarker={tempMarker}
          />
       </div>
 
@@ -195,7 +340,7 @@ export default function App() {
         {/* Sheet Header: Drag Handle & Menu */}
         <div className="w-full flex items-center justify-between px-6 pt-3 pb-1 shrink-0 relative">
            
-           {/* Empty div to balance the flex layout so the chevron stays centered */}
+           {/* Empty div to balance the flex layout */}
            <div className="w-10"></div> 
 
            {/* Toggle Button (Handle) */}
@@ -211,14 +356,13 @@ export default function App() {
               <OverflowMenu 
                 setCategory={(cat) => {
                     setCategory(cat);
-                    setIsSheetExpanded(true); // Expand if they select a menu item
+                    setReportMode(null);
+                    setIsSheetExpanded(true); 
                 }} 
                 customTrigger={<MenuIcon size={24} className="text-gray-300" />}
               />
            </div>
         </div>
-
-        {/* View Mode Tabs (Visible even when collapsed) */}
         
 
         {/* Scrollable Content Area (Only visible when expanded) */}
@@ -232,24 +376,20 @@ export default function App() {
                   <button
                     onClick={() => setViewMode('rider')}
                     className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      viewMode === 'rider'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-400'
+                      viewMode === 'rider' ? 'bg-blue-600 text-white' : 'text-gray-400'
                     }`}
                   >
                     Rider
-                </button>
+                  </button>
 
-                <button
-                  onClick={() => setViewMode('watcher')}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    viewMode === 'watcher'
-                    ? 'bg-purple-600 text-white'
-                      : 'text-gray-400'
-                  }`}
-                >
-                  Watcher
-                </button>
+                  <button
+                    onClick={() => setViewMode('watcher')}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      viewMode === 'watcher' ? 'bg-purple-600 text-white' : 'text-gray-400'
+                    }`}
+                  >
+                    Watcher
+                  </button>
               </div>
             </div>
                   <div className='w-full space-y-4'>
@@ -257,34 +397,37 @@ export default function App() {
                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                       {/* Navigation Inputs */}
                       <div className="bg-gray-700/30 p-4 rounded-2xl border border-gray-600/50 space-y-3">
-                         <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2"><Navigation size={14}/> Destination</h3>
-                         <div className="flex gap-2">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2"><Navigation size={14}/> Destination</h3>
+                          <div className="flex gap-2">
                              <input className="flex-1 bg-gray-900 border border-gray-600 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
                                     placeholder="Where to?" value={destination} onChange={e => setDestination(e.target.value)} />
-                         </div>
-                         
-                         <div className="flex items-center justify-between bg-gray-900 p-3 rounded-xl border border-gray-600/50" onClick={() => setIsWellLit(!isWellLit)}>
-                            <div className="flex items-center gap-3">
-                                {isWellLit ? <Sun size={20} className="text-cyan-400"/> : <Moon size={20} className="text-gray-500"/>} 
-                                <div className="flex flex-col">
-                                    <span className="text-sm font-medium">Safe Route</span>
-                                    <span className="text-xs text-gray-500">Prioritize well-lit streets</span>
-                                </div>
-                            </div>
-                            <div className={`w-11 h-6 rounded-full relative transition-colors ${isWellLit ? 'bg-cyan-500' : 'bg-gray-700'}`}>
-                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${isWellLit ? 'translate-x-6' : 'translate-x-1'}`}></div>
-                            </div>
-                         </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-between bg-gray-900 p-3 rounded-xl border border-gray-600/50" onClick={() => setIsWellLit(!isWellLit)}>
+                             <div className="flex items-center gap-3">
+                                 {isWellLit ? <Sun size={20} className="text-cyan-400"/> : <Moon size={20} className="text-gray-500"/>} 
+                                 <div className="flex flex-col">
+                                     <span className="text-sm font-medium">Safe Route</span>
+                                     <span className="text-xs text-gray-500">Prioritize well-lit streets</span>
+                                 </div>
+                             </div>
+                             <div className={`w-11 h-6 rounded-full relative transition-colors ${isWellLit ? 'bg-cyan-500' : 'bg-gray-700'}`}>
+                                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${isWellLit ? 'translate-x-6' : 'translate-x-1'}`}></div>
+                             </div>
+                          </div>
 
-                         <div className="flex gap-2">
-                             <button onClick={calculateRoute} className="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold text-sm transition-colors">Go</button>
+                          <div className="flex gap-2">
+                             <button onClick={calculateRoute} disabled={isCalculating} className="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
+                                {isCalculating ? <Loader2 className="animate-spin" size={18}/> : "Go"}
+                             </button>
                              {routeDistance && (
                                  <button onClick={openGoogleMaps} className="w-12 bg-gray-700 hover:bg-gray-600 rounded-xl flex items-center justify-center text-gray-300">
                                      <ExternalLink size={18}/>
                                  </button>
                              )}
-                         </div>
-                         {routeDistance && <div className="text-xs text-center text-gray-400 mt-1">{routeDistance} km • {routeDuration} min</div>}
+                          </div>
+                          {safetyNote && <div className="text-xs text-center text-cyan-300 mt-1">{safetyNote}</div>}
+                          {routeDistance && <div className="text-xs text-center text-gray-400 mt-1">{routeDistance} km • {routeDuration} min</div>}
                       </div>
 
                       {/* Share Trip */}
@@ -300,6 +443,7 @@ export default function App() {
                               </div>
                           )}
                       </div>
+
                    </div>
                 ) : (
                    /* Watcher Mode */
@@ -343,8 +487,27 @@ export default function App() {
                           <div className="p-3 bg-green-500/20 rounded-full"><MapPin size={32} className="text-green-500"/></div>
                           <span className="text-sm font-medium">Add Rack</span>
                         </button>
+                        <button onClick={() => { setReportMode('add_repair'); setIsSheetExpanded(false); }} 
+                            className={`h-32 rounded-2xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${reportMode === 'add_repair' ? 'bg-yellow-500/20 border-yellow-500 text-white scale-95' : 'bg-gray-700/30 border-gray-600 text-gray-400 hover:bg-gray-700'}`}>
+                          <div className="p-3 bg-yellow-500/20 rounded-full"><Wrench size={32} className="text-yellow-500"/></div>
+                          <span className="text-sm font-medium">Add Repair Station</span>
+                        </button>
                     </div>
                     <p className="text-center text-xs text-gray-500 pt-4">Select an option to close this menu and tap the location on the map.</p>
+                    
+                    {/* CONFIRMATION BUTTON APPEARS HERE IF MARKER SET */}
+                    {tempMarker && (
+                        <div className="bg-gray-700 p-4 rounded-2xl border border-gray-600 mt-4">
+                             <p className="text-center text-white mb-2 text-sm">Location selected!</p>
+                             <button 
+                               onClick={submitReport} 
+                               className="w-full bg-yellow-500 hover:bg-yellow-600 py-3 rounded-lg font-bold text-gray-900 shadow-lg transition-colors"
+                             >
+                               ✅ Confirm & Submit
+                             </button>
+                             <button onClick={() => setTempMarker(null)} className="w-full text-xs text-gray-400 mt-2 underline">Cancel selection</button>
+                        </div>
+                    )}
                   </div>
             )}
 
@@ -352,7 +515,7 @@ export default function App() {
                   <div className="text-center space-y-4 py-8">
                     <div className="mx-auto w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center"><Bike size={32} className="text-gray-400"/></div>
                     <h3 className="text-xl font-bold">Add bike rack</h3>
-                    <p className="text-gray-400 text-sm">Bike racks are automatically shown on your map.</p>
+                    <p className="text-gray-400 text-sm">Go to the "Report" menu to add a new rack.</p>
                   </div>
             )}
 
@@ -377,37 +540,21 @@ export default function App() {
 
             {category === 'repair' && (
                   <div className="text-center space-y-4 py-8">
-                    <div className="mx-auto w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center"><Bike size={32} className="text-gray-400"/></div>
+                    <div className="mx-auto w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center"><Wrench size={32} className="text-gray-400"/></div>
                     <h3 className="text-xl font-bold">Add repair stations</h3>
-                    <p className="text-gray-400 text-sm">Repair stations are automatically shown on your map.</p>
+                    <p className="text-gray-400 text-sm">Go to the "Report" menu to add a new station.</p>
                   </div>
             )}
         </div>
       </div>
+      
+      {/* Overlay for "Tap map" instruction */}
+      {reportMode && !tempMarker && !isSheetExpanded && (
+            <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 bg-yellow-500 text-black px-4 py-2 rounded-full font-bold text-sm shadow-lg animate-bounce pointer-events-none">
+                Tap map to set location
+            </div>
+      )}
 
-      {/* --- 4. Modals / Overlays --- */}
-      {modalOpen && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4">
-                <div className="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-xs border border-gray-700 transform transition-all scale-100">
-                    <h3 className="text-lg font-bold mb-2 text-white">Confirm Location</h3>
-                    <p className="text-gray-400 text-sm mb-6">
-                        {reportMode === 'report_theft' 
-                            ? "Report a theft here? This helps create safe routes." 
-                            : "Mark a public Bike Rack here?"}
-                    </p>
-                    <div className="flex gap-3">
-                        <button onClick={() => setModalOpen(false)} className="flex-1 py-3 rounded-xl bg-gray-700 font-medium text-gray-300">Cancel</button>
-                        <button onClick={submitReport} className="flex-1 py-3 rounded-xl bg-blue-600 font-medium text-white shadow-lg shadow-blue-900/20">Confirm</button>
-                    </div>
-                </div>
-            </div>
-        )}
-        
-        {reportMode && !modalOpen && (
-            <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 bg-yellow-500 text-black px-4 py-2 rounded-full font-bold text-sm shadow-lg animate-bounce">
-                Tap map to confirm location
-            </div>
-        )}
     </div>
   );
 }
