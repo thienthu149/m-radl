@@ -25,16 +25,18 @@ const createCustomIcon = (color, svgString) => new L.DivIcon({
 });
 
 // Stable Click Handler
-const MapClickHandler = ({ onMapClick, mode }) => {
+const MapClickHandler = ({ onMapClick, reportMode }) => {
     useMapEvents({
         click: (e) => {
-            if (mode) {
+            if (reportMode) {
+                e.originalEvent.stopPropagation();
                 onMapClick(e.latlng);
             }
         },
     });
     return null;
 };
+
 
 // Helper to Recenter Map
 const RecenterMap = ({ center }) => {
@@ -45,7 +47,7 @@ const RecenterMap = ({ center }) => {
     return null;
 }
 
-const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, routeCoords, isWellLit, userPos, watchedPos, reportMode, onMapClick }) => {
+const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, routeCoords, isWellLit, userPos, watchedPos, reportMode, onMapClick, tempMarker}) => {
     
     // SVG Strings
     const rackSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>';
@@ -64,8 +66,17 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 className="map-tiles-dark"
             />
-            
-            <MapClickHandler onMapClick={onMapClick} mode={reportMode} />
+
+            {tempMarker && (
+                <Marker 
+                     position={[tempMarker.lat, tempMarker.lng]} 
+                    icon={createCustomIcon('#facc15', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>')} 
+                    interactive={false}
+                >
+                    <Popup>New Marker</Popup>
+                </Marker>
+            )}
+
             <RecenterMap center={watchedPos ? [watchedPos.lat, watchedPos.lng] : null} />
 
             {/* Current User */}
@@ -147,6 +158,8 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
                     <Popup>Reparaturstation</Popup>
                 </Marker>
             ))}
+
+            <MapClickHandler onMapClick={onMapClick} reportMode={reportMode} />
 
         </MapContainer>
     );

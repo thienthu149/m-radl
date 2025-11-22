@@ -43,8 +43,8 @@ export default function App() {
   const [isDangerAlert, setIsDangerAlert] = useState(false);
   
   const [reportMode, setReportMode] = useState(null); 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedPos, setSelectedPos] = useState(null);
+  const [tempMarker, setTempMarker] = useState(null);
+
 
   useEffect(() => {
     signInAnonymously(auth);
@@ -150,13 +150,12 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
 
-  const handleMapClick = useCallback((pos) => {
-    setSelectedPos(pos);
-    setModalOpen(true);
+  const handleMapClick = useCallback((pos) => {      
+    setTempMarker(pos);
   }, []);
 
   const submitReport = async () => {
-    if (!selectedPos || !user) return;
+    if (!tempMarker || !user) return;
     let coll = null;
 
     if (reportMode === 'report_theft') coll = 'theft_reports';
@@ -166,19 +165,17 @@ export default function App() {
     
     try {
         await addDoc(collection(db, coll), {
-            lat: selectedPos.lat,
-            lng: selectedPos.lng,
+            lat: tempMarker.lat,
+            lng: tempMarker.lng,
             reportedAt: serverTimestamp(),
             reporter: user.uid
         });
+        setTempMarker(null);
         // Using custom Modal for feedback instead of blocking alert()
     } catch (e) {
         console.error("Error reporting:", e);
     }
-
-    setModalOpen(false);
     setReportMode(null);
-    setSelectedPos(null);
   };
 
   const startSharing = async () => {
@@ -252,6 +249,20 @@ export default function App() {
                              <Wrench size={20}/><span className="text-xs">Reparaturstation hinzufügen</span>
                           </button>
                       </div>
+                      {/* 1. ANWEISUNG: Nur anzeigen, wenn ein Modus aktiv ist, aber noch kein Marker gesetzt wurde. */}
+                      {reportMode && !tempMarker && (
+                        <div className="text-center text-xs text-yellow-400 animate-pulse mt-4">Tap map to confirm</div>
+                      )}
+                      
+                      {/* 2. ABSENDE-KNOPF: Nur anzeigen, wenn ein Marker UND ein Modus gesetzt sind. */}
+                      {tempMarker && reportMode && (
+                        <button 
+                          onClick={submitReport} 
+                          className="w-full bg-yellow-500 hover:bg-yellow-600 py-3 rounded-lg font-medium text-gray-900 mt-4 shadow-lg transition-colors"
+                        >
+                          ✅ Position Bestätigen & Melden
+                        </button>
+                      )}
                       {reportMode && <div className="text-center text-xs text-yellow-400 animate-pulse">Tap map to confirm</div>}
                    </div>
                 ) : (
@@ -274,27 +285,10 @@ export default function App() {
              <LeafletMap 
                 center={currentLocation} zoom={zoom} theftZones={theftZones} bikeRacks={bikeRacks} repairStations={repairStations}
                 routeCoords={routeCoords} isWellLit={isWellLit} userPos={currentLocation}
-                watchedPos={watchedLocation} reportMode={reportMode}
+                watchedPos={watchedLocation} tempMarker={tempMarker} reportMode={reportMode}
                 onMapClick={handleMapClick}
              />
         </main>
-
-        {modalOpen && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                <div className="bg-gray-800 p-6 rounded-xl shadow-2xl max-w-sm w-full border border-gray-700 m-4">
-                    <h3 className="text-lg font-bold mb-2">Confirm Location</h3>
-                    <p className="text-gray-400 text-sm mb-6">
-                        {reportMode === 'report_theft' 
-                            ? "Report a theft here? (This creates a Red Danger Zone)" 
-                            : "Mark a new Bike Rack here?"}
-                    </p>
-                    <div className="flex gap-3">
-                        <button onClick={() => setModalOpen(false)} className="flex-1 py-2 rounded-lg bg-gray-700">Cancel</button>
-                        <button onClick={submitReport} className="flex-1 py-2 rounded-lg bg-blue-600">Confirm</button>
-                    </div>
-                </div>
-            </div>
-        )}
       </div>
     </div>
   );
