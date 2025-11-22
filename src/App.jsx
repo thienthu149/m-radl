@@ -327,7 +327,7 @@ export default function App() {
       {/* --- 2. Floating Top Bar (Branding Only) --- */}
       <div className="absolute top-0 left-0 right-0 z-10 p-4 pointer-events-none flex justify-center">
         <div className="bg-gray-800/90 backdrop-blur-md border border-gray-700 shadow-lg px-4 py-2 rounded-full flex items-center gap-2 pointer-events-auto">
-           <div className="bg-blue-600 p-1.5 rounded-full"><Bike size={18} /></div>
+            <img src="/kindl-on-bike.png" alt="Logo" className="w-6 h-6" />
            <h1 className="text-lg font-bold tracking-tight">M-<span className="text-blue-400">Radl</span></h1>
         </div>
       </div>
