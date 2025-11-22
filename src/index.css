@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Leaflet Dark Mode Override */
+.map-tiles-dark {
+    filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
