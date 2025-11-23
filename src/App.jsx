@@ -71,7 +71,7 @@ export default function App() {
 
   // 4. APP STATE
   const [viewMode, setViewMode] = useState('rider'); 
-  const [user, setUser] = useState(null);
+
 
   const [isSheetExpanded, setIsSheetExpanded] = useState(false); 
   const [category, setCategory] = useState('navigation');
