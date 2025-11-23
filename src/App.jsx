@@ -5,9 +5,12 @@ import { collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, setDoc
 import { auth, db } from './config/firebase';
 import LeafletMap from './components/LeafletMap';
 import OverflowMenu from './components/Menu';
-//hooks:
+
+// --- HOOKS & SERVICES ---
 import { useAuth } from './hooks/useAuth';
 import { useLocation } from './hooks/useLocation';
+import { useUserPoints } from './hooks/useUserPoints';
+import { addUserPoints } from './services/userService';
 
 // --- OVERPASS API UTILS ---
 const calculateLightingScore = (routeCoords, litElements) => {
@@ -30,6 +33,8 @@ const calculateLightingScore = (routeCoords, litElements) => {
 
 export default function App() {
   const { user } = useAuth();
+  const userPoints = useUserPoints(user);
+
   const [viewMode, setViewMode] = useState('rider'); 
   const [isSheetExpanded, setIsSheetExpanded] = useState(false); // Controls bottom sheet height
   const [category, setCategory] = useState('navigation');
@@ -61,6 +66,7 @@ export default function App() {
   // UI State
   const [reportMode, setReportMode] = useState(null); 
   const [tempMarker, setTempMarker] = useState(null);
+  const [floatingPoints, setFloatingPoints] = useState(null);
 
   // --- INIT & AUTH ---
   /*useEffect(() => {
@@ -285,6 +291,7 @@ export default function App() {
     if (reportMode === 'report_theft') coll = 'theft_reports';
     if (reportMode === 'add_rack') coll = 'bike_racks';
     if (reportMode === 'add_repair') coll = 'repair_stations';
+    
 
     try {
         await addDoc(collection(db, coll), {
@@ -293,12 +300,26 @@ export default function App() {
             reportedAt: serverTimestamp(),
             reporter: user.uid
         });
+
+        //Animation for points earned
+        const pointsEarned = 100;
+        setFloatingPoints(pointsEarned);
+        setTimeout(() => setFloatingPoints(null), 2000);
+
         setTempMarker(null);
         setReportMode(null);
         // Reset view to navigation or just close report mode
     } catch (e) {
         console.error("Error reporting:", e);
     }
+
+    if (reportMode === 'add_rack' || reportMode === 'add_repair') {
+        await addUserPoints(user.uid, 100); 
+    } 
+
+
+    setTempMarker(null);
+    setReportMode(null);
   };
 
   const startSharing = async () => {
@@ -315,7 +336,22 @@ export default function App() {
 
   return (
     <div className="h-screen w-full bg-gray-900 text-white overflow-hidden font-sans relative flex flex-col">
-      
+      {/* --- 2. THE FLOATING POINTS POPUP --- */}
+      {floatingPoints !== null && (
+        // Container: Positions it near the top (top-24), high z-index to sit over map
+        <div className="fixed top-24 left-0 right-0 z-[9999] flex justify-center pointer-events-none">
+          <div 
+            className={`
+              bg-yellow-400 text-gray-900 px-6 py-3 rounded-full font-black text-xl 
+              shadow-[0_0_20px_rgba(250,204,21,0.6)] flex items-center gap-2
+              animate-float-fade
+            `}
+          >
+            <Bike size={24} className="fill-gray-900" />
+            <span>+{floatingPoints} POINTS</span>
+          </div>
+        </div>
+      )}
       {/* --- 1. Full Screen Map Layer --- */}
       <div className="absolute inset-0 z-0">
          <LeafletMap 
@@ -557,7 +593,7 @@ export default function App() {
                 Tap map to set location
             </div>
       )}
-
+      
     </div>
   );
 }
