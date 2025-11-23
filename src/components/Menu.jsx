@@ -13,7 +13,7 @@ const options = [
     { key: 'emergency', label: 'Emergency Contacts' },
 ];
 
-const ITEM_HEIGHT = 48;
+const ITEM_HEIGHT = 52;
 
 export default function OverflowMenu({ setCategory, customTrigger }) {
   const [anchorEl, setAnchorEl] = React.useState(null);

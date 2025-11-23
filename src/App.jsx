@@ -1,10 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Navigation, AlertTriangle, Bike, Share2, Eye, Menu as MenuIcon, X, Sun, Moon, Copy, ChevronUp, ChevronDown, MapPin, ExternalLink, Wrench, Loader2 } from 'lucide-react';
+
+import { Navigation, AlertTriangle, Bike, Share2, Eye, Menu as MenuIcon, X, Sun, Moon, Copy, ChevronUp, ChevronDown, MapPin, ExternalLink, Wrench, Loader2, Trophy, LogOut } from 'lucide-react';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { auth, db } from './config/firebase';
+import { db } from './config/firebase';
 import LeafletMap from './components/LeafletMap';
 import OverflowMenu from './components/Menu';
+import LoginModal from './components/LoginModal';
+
+// --- HOOKS ---
+import { useLocation } from './hooks/useLocation';
+import { useLogin } from './hooks/useLogin'; // The new hook we just wrote
+import { addUserPoints } from './services/userService';
+import { useUserPoints } from './hooks/useUserPoints';
+import { useLeaderboard } from './hooks/useLeaderboard';
 import SunCalc from 'suncalc';
 
 // --- HELPER: Sun Exposure ---
@@ -36,6 +45,7 @@ const calculateSunExposure = (routeCoords, obstacles) => {
 
 // --- HELPER: Lighting Score ---
 const calculateLightingScore = (routeCoords, litElements) => {
+
   let litPoints = 0;
   const threshold = 0.0004; 
 
@@ -53,13 +63,23 @@ const calculateLightingScore = (routeCoords, litElements) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [viewMode, setViewMode] = useState('rider');
+    // 1. AUTH & LOGIN STATE (Managed by single hook now)
+  const { user, showLogin, loginUser, registerUser, loginGuest, logout, error } = useLogin();
+  
+  // 2. POINTS
+  const userPoints = useUserPoints(user);
+
+  // 3. LOCATION (From your existing hook)
+  const { currentLocation, setCurrentLocation } = useLocation();
+
+  // 4. APP STATE
+  const [viewMode, setViewMode] = useState('rider'); 
+
+
   const [isSheetExpanded, setIsSheetExpanded] = useState(false); 
   const [category, setCategory] = useState('navigation');
 
   // Map & Data State
-  const [currentLocation, setCurrentLocation] = useState({ lat: 48.1351, lng: 11.5820 });
   const [zoom, setZoom] = useState(13);
   const [theftZones, setTheftZones] = useState([]);
   const [bikeRacks, setBikeRacks] = useState([]);
@@ -86,28 +106,29 @@ export default function App() {
   // UI State
   const [reportMode, setReportMode] = useState(null);
   const [tempMarker, setTempMarker] = useState(null);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
-  // --- INIT & AUTH ---
-  useEffect(() => {
-    signInAnonymously(auth);
-    const unsubAuth = onAuthStateChanged(auth, setUser);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        (err) => console.error("GPS Error:", err),
-        { enableHighAccuracy: true }
-      );
-    }
-    return unsubAuth;
-  }, []);
+  // Dummy Data for the UI
+  /*const leaderboardData = [
+    { id: 1, name: "IsarRider99", points: 1250, badge: "🥇" },
+    { id: 2, name: "MunichVelos", points: 980, badge: "🥈" },
+    { id: 3, name: "BavarianBike", points: 850, badge: "🥉" },
+    { id: 4, name: "CityCruiser", points: 720, badge: "#4" },
+    { id: 5, name: "RadlPro", points: 650, badge: "#5" },
+    { id: 6, name: "SundayDriver", points: 430, badge: "#6" },
+  ];*/
+  const { leaderboard, currentUserRank } = useLeaderboard(user?.uid);
+
+  const [floatingPoints, setFloatingPoints] = useState(null);
 
   // --- FIRESTORE LISTENERS ---
   useEffect(() => {
     if (!user) return;
-    const unsubThefts = onSnapshot(collection(db, 'theft_reports'), (s) =>
+    
+    const unsubThefts = onSnapshot(collection(db, 'theft_reports'), (s) => 
       setTheftZones(s.docs.map(d => ({ id: d.id, ...d.data() })))
     );
-    const unsubRacks = onSnapshot(collection(db, 'bike_racks'), (s) =>
+    const unsubRacks = onSnapshot(collection(db, 'bike_racks'), (s) => 
       setBikeRacks(s.docs.map(d => ({ id: d.id, ...d.data() })))
     );
     const unsubRepair = onSnapshot(collection(db, 'repair_stations'), (s) =>
@@ -116,13 +137,13 @@ export default function App() {
     return () => { unsubThefts(); unsubRacks(); unsubRepair(); };
   }, [user]);
 
-  // --- ROUTING LOGIC ---
+  // --- ROUTING FUNCTION ---
   const calculateRoute = async () => {
     if (!destination) return;
     setIsCalculating(true);
     setSafetyNote(null);
-    setIsSheetExpanded(false);
-
+    setIsSheetExpanded(false); 
+    
     const GH_API_KEY = import.meta.env.VITE_GH_API_KEY;
 
     try {
@@ -130,7 +151,14 @@ export default function App() {
       const geoData = await geoRes.json();
       if (!geoData.hits || geoData.hits.length === 0) { alert("Location not found"); setIsCalculating(false); return; }
 
-      const dCoords = { lat: geoData.hits[0].point.lat, lng: geoData.hits[0].point.lng };
+      if (!geoData.hits || geoData.hits.length === 0) { 
+          alert("Location not found"); 
+          setIsCalculating(false); 
+          return; 
+      }
+      
+      const hit = geoData.hits[0];
+      const dCoords = { lat: hit.point.lat, lng: hit.point.lng };
       setDestCoords(dCoords);
 
       const startPt = `${currentLocation.lat},${currentLocation.lng}`;
@@ -247,7 +275,7 @@ export default function App() {
             lastUpdate: serverTimestamp(),
             status: 'active'
           });
-        } catch (e) { console.error("Error updating location:", e); }
+        } catch (e) { console.error(e); }
       }, 5000);
     }
     return () => { if (interval) clearInterval(interval); };
@@ -292,22 +320,27 @@ export default function App() {
   const submitReport = async () => {
     if (!tempMarker || !user) return;
     let coll = null;
-    if (reportMode === 'report_theft' || reportMode === 'report') coll = 'theft_reports';
-    if (reportMode === 'add_rack' || reportMode === 'racks') coll = 'bike_racks';
-    if (reportMode === 'add_repair' || reportMode === 'repair') coll = 'repair_stations';
-
-    if (!coll) { alert("Invalid report type"); return; }
+    if (reportMode === 'report_theft') coll = 'theft_reports';
+    if (reportMode === 'add_rack') coll = 'bike_racks';
+    if (reportMode === 'add_repair') coll = 'repair_stations';
 
     try {
-      await addDoc(collection(db, coll), {
-        lat: tempMarker.lat,
-        lng: tempMarker.lng,
-        reportedAt: serverTimestamp(),
-        reporter: user.uid
-      });
-      setTempMarker(null);
-      setReportMode(null);
-      setIsSheetExpanded(true);
+        await addDoc(collection(db, coll), {
+            lat: tempMarker.lat,
+            lng: tempMarker.lng,
+            reportedAt: serverTimestamp(),
+            reporter: user.uid
+        });
+
+        // Points Logic
+        const pointsEarned = reportMode === 'report_theft' ? 50 : 10;
+        await addUserPoints(user.uid, pointsEarned);
+        
+        setFloatingPoints(pointsEarned);
+        setTimeout(() => setFloatingPoints(null), 2000);
+        
+        setTempMarker(null);
+        setReportMode(null);
     } catch (e) {
       console.error("Error reporting:", e);
     }
@@ -329,10 +362,33 @@ export default function App() {
 
   const toggleSheet = () => setIsSheetExpanded(!isSheetExpanded);
 
+  // --- CONDITIONAL RENDER: LOGIN MODAL ---
+  if (showLogin) {
+    return (
+      <LoginModal
+        loginUser={loginUser}
+        registerUser={registerUser}
+        loginGuest={loginGuest}
+        error={error} 
+      />
+    );
+  }
+
+  // --- MAIN APP UI ---
   return (
     <div className="h-screen w-full bg-gray-900 text-white overflow-hidden font-sans relative flex flex-col">
+      
+      {/* Points Animation */}
+      {floatingPoints !== null && (
+        <div className="fixed top-24 left-0 right-0 z-[9999] flex justify-center pointer-events-none">
+            <div className={`bg-yellow-400 text-gray-900 px-6 py-3 rounded-full font-black text-xl shadow-[0_0_20px_rgba(250,204,21,0.6)] flex items-center gap-2 animate-float-fade`}>
+               <Bike size={24} className="fill-gray-900" />
+               <span>+{floatingPoints} POINTS</span>
+            </div>
+        </div>
+      )}
 
-      {/* 1. Map Layer */}
+      {/* Map Layer */}
       <div className="absolute inset-0 z-0">
         <LeafletMap
           center={currentLocation} zoom={zoom}
@@ -343,13 +399,26 @@ export default function App() {
         />
       </div>
 
-      {/* 2. Top Bar */}
+
+      {/* Top Bar */}
       <div className="absolute top-0 left-0 right-0 z-10 p-4 pointer-events-none flex justify-center">
         <div className="bg-gray-800/90 backdrop-blur-md border border-gray-700 shadow-lg px-4 py-2 rounded-full flex items-center gap-2 pointer-events-auto">
-          <img src="/kindl-on-bike.png" alt="Logo" className="w-6 h-6" />
-          <h1 className="text-lg font-bold tracking-tight">M-<span className="text-blue-400">Radl</span></h1>
+           <div className="bg-blue-600 p-1.5 rounded-full"><Bike size={18} /></div>
+           <h1 className="text-lg font-bold tracking-tight">M-<span className="text-blue-400">Radl</span></h1>
+           {user && (
+             <div className="flex items-center gap-2">
+                 <div className="ml-2 px-3 py-0.5 bg-yellow-500/20 border border-yellow-500/50 rounded-full text-yellow-400 text-xs font-bold flex items-center">
+                   {userPoints} pts
+                 </div>
+                 {/* Logout Button */}
+                 <button onClick={logout} className="bg-gray-700 p-1.5 rounded-full text-gray-400 hover:text-white">
+                    <LogOut size={14}/>
+                 </button>
+             </div>
+           )}
         </div>
       </div>
+
 
       {/* 3. Confirmation Pop-up */}
       {tempMarker && reportMode && (
@@ -382,8 +451,16 @@ export default function App() {
       <div className={`absolute bottom-0 left-0 right-0 z-20 bg-gray-800 border-t border-gray-700 rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.5)] transition-all duration-300 ease-in-out flex flex-col ${isSheetExpanded ? 'h-[65%]' : 'h-24'}`}>
         
         {/* Header */}
+
         <div className="w-full flex items-center justify-between px-6 pt-3 pb-1 shrink-0 relative">
-           <div className="w-10"></div> 
+          <div className="w-10 flex justify-start">
+              <button 
+                onClick={() => setShowLeaderboard(true)}
+                className="flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+              >
+                 <Trophy size={24} />
+              </button>
+           </div>
            <button onClick={toggleSheet} className="p-1 bg-gray-700 rounded-full hover:bg-gray-600 text-gray-300 transition-colors">
               {isSheetExpanded ? <ChevronDown size={24}/> : <ChevronUp size={24}/>}
            </button>
@@ -579,6 +656,90 @@ export default function App() {
       {reportMode && !tempMarker && !isSheetExpanded && (
         <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-30 bg-yellow-500 text-black px-4 py-2 rounded-full font-bold text-sm shadow-lg pointer-events-none">
             Tap map to set location
+        </div>
+      )}
+
+      {/* 6. Full Screen Leaderboard Overlay */}
+      {showLeaderboard && (
+        <div className="absolute inset-0 z-50 bg-gray-900 text-white flex flex-col animate-in slide-in-from-bottom-10 fade-in duration-300">
+            
+            {/* Header */}
+            <div className="p-6 pt-12 bg-gray-800 border-b border-gray-700 flex items-center justify-between shadow-xl shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-yellow-500/20 rounded-full">
+                        <Trophy size={24} className="text-yellow-500" />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold">Top Riders</h2>
+                        <p className="text-xs text-gray-400">Contribution Points</p>
+                    </div>
+                </div>
+                {/* Close Button */}
+                <button 
+                    onClick={() => setShowLeaderboard(false)} 
+                    className="p-2 bg-gray-700 hover:bg-gray-600 rounded-full transition-colors"
+                >
+                    <X size={24} />
+                </button>
+            </div>
+
+            {/* Scrollable List */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+
+            {/* 1. Your Personal Rank Card */}
+            {user ? (
+                <div className="bg-gradient-to-r from-blue-900/50 to-blue-800/50 border border-blue-500/30 p-4 rounded-xl flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-4">
+                        <span className="font-mono font-bold text-blue-400">
+                            {currentUserRank ? currentUserRank.badge : '-'}
+                        </span>
+                        <div className="flex flex-col">
+                            <span className="font-bold">You</span>
+                            <span className="text-xs text-blue-300">
+                                {currentUserRank?.points > 0 ? "Keep riding!" : "Start earning points!"}
+                            </span>
+                        </div>
+                    </div>
+                    <span className="font-bold text-xl">
+                        {currentUserRank ? currentUserRank.points : 0} pts
+                    </span>
+                </div>
+            ) : (
+                <div className="text-center p-4 bg-gray-800 rounded-xl mb-4 text-gray-400 text-sm">
+                    Log in to see your rank
+                </div>
+            )}
+
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2 px-2">Global Ranking</h3>
+
+            {/* 2. The Dynamic Leaderboard Loop */}
+            {leaderboard.map((rider) => (
+                <div 
+                    key={rider.id} 
+                    // Highlight the row if it's the current user
+                    className={`
+                        p-4 rounded-xl flex items-center justify-between transition-colors
+                        ${rider.id === user?.uid 
+                            ? 'bg-blue-600/20 border border-blue-500/50' 
+                            : 'bg-gray-800/50 border border-gray-700 hover:bg-gray-800'}
+                    `}
+                >
+                    <div className="flex items-center gap-4">
+                        {/* Fixed width for badge to align names */}
+                        <span className="text-2xl w-8 text-center">{rider.badge}</span>
+                        <span className="font-medium truncate max-w-[150px]">{rider.name}</span>
+                    </div>
+                    <span className="font-bold text-yellow-500">{rider.points}</span>
+                </div>
+            ))}
+
+            {leaderboard.length === 0 && (
+                <div className="text-center py-10 text-gray-500">
+                    No riders yet. Be the first!
+                </div>
+            )}
+        </div>
+        
         </div>
       )}
 
