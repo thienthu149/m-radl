@@ -56,9 +56,9 @@ const MapResizer = () => {
 
 const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, routeCoords, isWellLit, userPos, watchedPos, reportMode, onMapClick, tempMarker }) => {
     
-    const rackSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>';
-    const userSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>';
-    const repairSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4l-9 9-3.6.6.6-3.6 9-9z"></path><path d="m16 5 3 3"></path></svg>';
+    const rackSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-parking-icon lucide-circle-parking"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>';
+    const userSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bike-icon lucide-bike"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>';
+    const repairSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-wrench-icon lucide-wrench"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z"/></svg>';
 
     const isInteractive = reportMode === null;
 
@@ -74,41 +74,13 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
             <RecenterMap center={watchedPos ? [watchedPos.lat, watchedPos.lng] : null} />
 
             {tempMarker && (
-                <>
-                    {/* CASE 1: Report Theft -> RED CIRCLE */}
-                    {reportMode === 'report_theft' && (
-                        <Circle 
-                            center={[tempMarker.lat, tempMarker.lng]} 
-                            radius={300} 
-                            pathOptions={{ 
-                                color: '#ef4444', // Red
-                                fillColor: '#ef4444', 
-                                fillOpacity: 0.4, 
-                                dashArray: '10, 10', 
-                                weight: 2 
-                            }}
-                            interactive={false}
-                        />
-                    )}
-
-                    {/* CASE 2: Add Rack -> GREEN PIN */}
-                    {reportMode === 'add_rack' && (
-                        <Marker 
-                             position={[tempMarker.lat, tempMarker.lng]} 
-                             icon={createCustomIcon('#22c55e', rackSvg)} // Green
-                             interactive={false}
-                        />
-                    )}
-
-                    {/* CASE 3: Add Repair -> YELLOW PIN */}
-                    {reportMode === 'add_repair' && (
-                        <Marker 
-                             position={[tempMarker.lat, tempMarker.lng]} 
-                             icon={createCustomIcon('#eab308', repairSvg)} // Yellow
-                             interactive={false}
-                        />
-                    )}
-                </>
+                <Marker 
+                     position={[tempMarker.lat, tempMarker.lng]} 
+                     icon={createCustomIcon('#facc15', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>')} 
+                     interactive={false}
+                >
+                    <Popup>Confirm Location</Popup>
+                </Marker>
             )}
 
             {/* Current User - Slightly larger icon */}
@@ -135,7 +107,7 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
                     )}
                     <Polyline 
                         positions={routeCoords} 
-                        color="#3b82f6" 
+                        color="#3b82f6"
                         weight={5} 
                         opacity={1} 
                         interactive={false}
@@ -179,7 +151,6 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
                     icon={createCustomIcon('#eab308', repairSvg)} // yellow-ish color
                     interactive={isInteractive}
                 >
-                    <Popup>Reparaturstation</Popup>
                 </Marker>
             ))}
 

@@ -307,6 +307,7 @@ export default function App() {
       });
       setTempMarker(null);
       setReportMode(null);
+      setIsSheetExpanded(true);
     } catch (e) {
       console.error("Error reporting:", e);
     }
