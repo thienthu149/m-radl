@@ -12,7 +12,7 @@ export const useLeaderboard = (currentUserId) => {
     const q = query(
       collection(db, 'points'), 
       orderBy('points', 'desc'), 
-      limit(50)
+      limit(10)
     );
 
     // 2. Listen to the Points updates
