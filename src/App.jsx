@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Navigation, AlertTriangle, Bike, Share2, Eye, Menu as MenuIcon, X, Sun, Moon, Copy, ChevronUp, ChevronDown, MapPin, ExternalLink, Wrench, Loader2 } from 'lucide-react';
+import { Navigation, AlertTriangle, Bike, Share2, Eye, Menu as MenuIcon, X, Sun, Moon, Copy, ChevronUp, ChevronDown, MapPin, ExternalLink, Wrench, Loader2, Trophy } from 'lucide-react';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './config/firebase';
@@ -86,6 +86,17 @@ export default function App() {
   // UI State
   const [reportMode, setReportMode] = useState(null);
   const [tempMarker, setTempMarker] = useState(null);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+
+  // Dummy Data for the UI
+  const leaderboardData = [
+    { id: 1, name: "IsarRider99", points: 1250, badge: "🥇" },
+    { id: 2, name: "MunichVelos", points: 980, badge: "🥈" },
+    { id: 3, name: "BavarianBike", points: 850, badge: "🥉" },
+    { id: 4, name: "CityCruiser", points: 720, badge: "#4" },
+    { id: 5, name: "RadlPro", points: 650, badge: "#5" },
+    { id: 6, name: "SundayDriver", points: 430, badge: "#6" },
+  ];
 
   // --- INIT & AUTH ---
   useEffect(() => {
@@ -382,7 +393,14 @@ export default function App() {
         
         {/* Header */}
         <div className="w-full flex items-center justify-between px-6 pt-3 pb-1 shrink-0 relative">
-           <div className="w-10"></div> 
+          <div className="w-10 flex justify-start">
+              <button 
+                onClick={() => setShowLeaderboard(true)}
+                className="flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+              >
+                 <Trophy size={24} />
+              </button>
+           </div>
            <button onClick={toggleSheet} className="p-1 bg-gray-700 rounded-full hover:bg-gray-600 text-gray-300 transition-colors">
               {isSheetExpanded ? <ChevronDown size={24}/> : <ChevronUp size={24}/>}
            </button>
@@ -578,6 +596,59 @@ export default function App() {
       {reportMode && !tempMarker && !isSheetExpanded && (
         <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-30 bg-yellow-500 text-black px-4 py-2 rounded-full font-bold text-sm shadow-lg pointer-events-none">
             Tap map to set location
+        </div>
+      )}
+
+      {/* 6. Full Screen Leaderboard Overlay */}
+      {showLeaderboard && (
+        <div className="absolute inset-0 z-50 bg-gray-900 text-white flex flex-col animate-in slide-in-from-bottom-10 fade-in duration-300">
+            
+            {/* Header */}
+            <div className="p-6 pt-12 bg-gray-800 border-b border-gray-700 flex items-center justify-between shadow-xl shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-yellow-500/20 rounded-full">
+                        <Trophy size={24} className="text-yellow-500" />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold">Top Riders</h2>
+                        <p className="text-xs text-gray-400">Contribution Points</p>
+                    </div>
+                </div>
+                {/* Close Button */}
+                <button 
+                    onClick={() => setShowLeaderboard(false)} 
+                    className="p-2 bg-gray-700 hover:bg-gray-600 rounded-full transition-colors"
+                >
+                    <X size={24} />
+                </button>
+            </div>
+
+            {/* Scrollable List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {/* Your Rank Card */}
+                <div className="bg-gradient-to-r from-blue-900/50 to-blue-800/50 border border-blue-500/30 p-4 rounded-xl flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-4">
+                        <span className="font-mono font-bold text-blue-400">#42</span>
+                        <div className="flex flex-col">
+                            <span className="font-bold">You</span>
+                            <span className="text-xs text-blue-300">Keep riding!</span>
+                        </div>
+                    </div>
+                    <span className="font-bold text-xl">120 pts</span>
+                </div>
+
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2 px-2">Global Ranking</h3>
+
+                {leaderboardData.map((user) => (
+                    <div key={user.id} className="bg-gray-800/50 border border-gray-700 p-4 rounded-xl flex items-center justify-between hover:bg-gray-800 transition-colors">
+                        <div className="flex items-center gap-4">
+                            <span className="text-2xl w-8 text-center">{user.badge}</span>
+                            <span className="font-medium">{user.name}</span>
+                        </div>
+                        <span className="font-bold text-yellow-500">{user.points}</span>
+                    </div>
+                ))}
+            </div>
         </div>
       )}
 
