@@ -135,7 +135,7 @@ const LeafletMap = ({ center, zoom, theftZones, bikeRacks, repairStations, route
                     )}
                     <Polyline 
                         positions={routeCoords} 
-                        color={isWellLit ? "#22d3ee" : "#ef4444"} 
+                        color="#3b82f6" 
                         weight={5} 
                         opacity={1} 
                         interactive={false}
