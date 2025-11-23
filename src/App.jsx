@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Navigation, AlertTriangle, Bike, Share2, Eye, Menu as MenuIcon, X, Sun, Moon, Copy, ChevronUp, ChevronDown, MapPin, ExternalLink, Wrench, Loader2, LogOut } from 'lucide-react';
+
+import { Navigation, AlertTriangle, Bike, Share2, Eye, Menu as MenuIcon, X, Sun, Moon, Copy, ChevronUp, ChevronDown, MapPin, ExternalLink, Wrench, Loader2, Trophy, LogOut } from 'lucide-react';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from './config/firebase';
 import LeafletMap from './components/LeafletMap';
@@ -11,6 +13,7 @@ import { useLocation } from './hooks/useLocation';
 import { useLogin } from './hooks/useLogin'; // The new hook we just wrote
 import { addUserPoints } from './services/userService';
 import { useUserPoints } from './hooks/useUserPoints';
+import { useLeaderboard } from './hooks/useLeaderboard';
 import SunCalc from 'suncalc';
 
 // --- HELPER: Sun Exposure ---
@@ -103,6 +106,19 @@ export default function App() {
   // UI State
   const [reportMode, setReportMode] = useState(null);
   const [tempMarker, setTempMarker] = useState(null);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+
+  // Dummy Data for the UI
+  /*const leaderboardData = [
+    { id: 1, name: "IsarRider99", points: 1250, badge: "🥇" },
+    { id: 2, name: "MunichVelos", points: 980, badge: "🥈" },
+    { id: 3, name: "BavarianBike", points: 850, badge: "🥉" },
+    { id: 4, name: "CityCruiser", points: 720, badge: "#4" },
+    { id: 5, name: "RadlPro", points: 650, badge: "#5" },
+    { id: 6, name: "SundayDriver", points: 430, badge: "#6" },
+  ];*/
+  const { leaderboard, currentUserRank } = useLeaderboard(user?.uid);
+
   const [floatingPoints, setFloatingPoints] = useState(null);
 
   // --- FIRESTORE LISTENERS ---
@@ -437,7 +453,14 @@ export default function App() {
         {/* Header */}
 
         <div className="w-full flex items-center justify-between px-6 pt-3 pb-1 shrink-0 relative">
-           <div className="w-10"></div> 
+          <div className="w-10 flex justify-start">
+              <button 
+                onClick={() => setShowLeaderboard(true)}
+                className="flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+              >
+                 <Trophy size={24} />
+              </button>
+           </div>
            <button onClick={toggleSheet} className="p-1 bg-gray-700 rounded-full hover:bg-gray-600 text-gray-300 transition-colors">
               {isSheetExpanded ? <ChevronDown size={24}/> : <ChevronUp size={24}/>}
            </button>
@@ -635,6 +658,91 @@ export default function App() {
             Tap map to set location
         </div>
       )}
+
+      {/* 6. Full Screen Leaderboard Overlay */}
+      {showLeaderboard && (
+        <div className="absolute inset-0 z-50 bg-gray-900 text-white flex flex-col animate-in slide-in-from-bottom-10 fade-in duration-300">
+            
+            {/* Header */}
+            <div className="p-6 pt-12 bg-gray-800 border-b border-gray-700 flex items-center justify-between shadow-xl shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-yellow-500/20 rounded-full">
+                        <Trophy size={24} className="text-yellow-500" />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold">Top Riders</h2>
+                        <p className="text-xs text-gray-400">Contribution Points</p>
+                    </div>
+                </div>
+                {/* Close Button */}
+                <button 
+                    onClick={() => setShowLeaderboard(false)} 
+                    className="p-2 bg-gray-700 hover:bg-gray-600 rounded-full transition-colors"
+                >
+                    <X size={24} />
+                </button>
+            </div>
+
+            {/* Scrollable List */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+
+            {/* 1. Your Personal Rank Card */}
+            {user ? (
+                <div className="bg-gradient-to-r from-blue-900/50 to-blue-800/50 border border-blue-500/30 p-4 rounded-xl flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-4">
+                        <span className="font-mono font-bold text-blue-400">
+                            {currentUserRank ? currentUserRank.badge : '-'}
+                        </span>
+                        <div className="flex flex-col">
+                            <span className="font-bold">You</span>
+                            <span className="text-xs text-blue-300">
+                                {currentUserRank?.points > 0 ? "Keep riding!" : "Start earning points!"}
+                            </span>
+                        </div>
+                    </div>
+                    <span className="font-bold text-xl">
+                        {currentUserRank ? currentUserRank.points : 0} pts
+                    </span>
+                </div>
+            ) : (
+                <div className="text-center p-4 bg-gray-800 rounded-xl mb-4 text-gray-400 text-sm">
+                    Log in to see your rank
+                </div>
+            )}
+
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2 px-2">Global Ranking</h3>
+
+            {/* 2. The Dynamic Leaderboard Loop */}
+            {leaderboard.map((rider) => (
+                <div 
+                    key={rider.id} 
+                    // Highlight the row if it's the current user
+                    className={`
+                        p-4 rounded-xl flex items-center justify-between transition-colors
+                        ${rider.id === user?.uid 
+                            ? 'bg-blue-600/20 border border-blue-500/50' 
+                            : 'bg-gray-800/50 border border-gray-700 hover:bg-gray-800'}
+                    `}
+                >
+                    <div className="flex items-center gap-4">
+                        {/* Fixed width for badge to align names */}
+                        <span className="text-2xl w-8 text-center">{rider.badge}</span>
+                        <span className="font-medium truncate max-w-[150px]">{rider.name}</span>
+                    </div>
+                    <span className="font-bold text-yellow-500">{rider.points}</span>
+                </div>
+            ))}
+
+            {leaderboard.length === 0 && (
+                <div className="text-center py-10 text-gray-500">
+                    No riders yet. Be the first!
+                </div>
+            )}
+        </div>
+        
+        </div>
+      )}
+
     </div>
   );
 }
