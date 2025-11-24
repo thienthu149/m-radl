@@ -2,7 +2,7 @@
 *Ride Safe and Sound. Know Your Way Around! - the smarter way to cycle Munich*
 
 
-### 🧭Navigation Modes ###
+### 🧭 Navigation Modes ###
 M-Radl strives to make biking around Munich safer and more comfortable. It provides multiple routing options, such as a standard navigatio mode, a Safe Mode to ride securely at night by avoiding dark areas, and a Cool Mode that analyzes and combines multiple data sources to calculate the shadiest route during the summer heat. 
 <br/>
 
