@@ -403,7 +403,11 @@ export default function App() {
       {/* Top Bar */}
       <div className="absolute top-0 left-0 right-0 z-10 p-4 pointer-events-none flex justify-center">
         <div className="bg-gray-800/90 backdrop-blur-md border border-gray-700 shadow-lg px-4 py-2 rounded-full flex items-center gap-2 pointer-events-auto">
-           <div className="bg-blue-600 p-1.5 rounded-full"><Bike size={18} /></div>
+           <img 
+             src="./kindl-on-bike.png" 
+             alt="M-Radl Logo" 
+             className="w-8 h-8 object-contain" 
+           />
            <h1 className="text-lg font-bold tracking-tight">M-<span className="text-blue-400">Radl</span></h1>
            {user && (
              <div className="flex items-center gap-2">
@@ -643,6 +647,7 @@ export default function App() {
                   <div className="space-y-3 pt-2">
                       <a href="tel:112" className="flex items-center justify-center w-full py-4 bg-red-600 text-white rounded-xl text-lg font-bold shadow-lg shadow-red-900/50 active:scale-95 transition-transform">Emergency call</a>
                       <a href="tel:110" className="flex items-center justify-center w-full py-4 bg-gray-700 text-white rounded-xl text-lg font-bold active:scale-95 transition-transform">Police</a>
+                       <a href="tel:017659877377" className="flex items-center justify-center w-full py-4 bg-gray-700 text-white rounded-xl text-lg font-bold active:scale-95 transition-transform">Cong</a>
                       <a href="tel:089 77 34 29" className="flex items-center justify-center w-full py-4 bg-gray-700 text-white rounded-xl text-lg font-bold active:scale-95 transition-transform">ADFC München</a>
                   </div>
               </div>
