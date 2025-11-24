@@ -1,20 +1,19 @@
-# m-radl
-für hackatum
+# M-Radl
+*Ride Safe and Sound. Know Your Way Around! - the smarter way to cycle Munich*
 
-# React + Vite
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+### 🧭Navigation Modes ###
+M-Radl strives to make biking around Munich safer and more comfortable. It provides multiple routing options, such as a standard navigatio mode, a Safe Mode to ride securely at night by avoiding dark areas, and a Cool Mode that analyzes and combines multiple data sources to calculate the shadiest route during the summer heat. 
+<br/>
 
-Currently, two official plugins are available:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### 🎮 Crowdsourcing with gamification ###
+It also uses a crowdsourcing approach where users can easily mark locations of bike racks, repair stations, and report theft zones to create Danger Zones that inform and warn other users. To increase user engagement the web app is gamefied with a leaderboard, where bikers earn points by reporting thefts, or the location of repairs stations and bike racks. 
+<br/>
 
-## React Compiler
+### 🛡️ Watcher Mode ###    
+Through our Watcher Mode, a rider can generate a unique Trip ID and share it with a friend. The friend can watch their live location on a map and is notified if the rider stops moving inside a known Danger Zone.
+<br/>
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-
+### 🚨 Emergency Contacts ###
+Finall, M-Radl provides easy to access emergency numbers that bikers can call to directly contact emergency services, without having to leave the app.
