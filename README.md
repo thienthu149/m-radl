@@ -37,17 +37,10 @@ Through our Watcher Mode, a rider can generate a unique Trip ID and share it wit
 <br/>
 
 ### 🚨 Emergency Contacts ###
-<table>
-  <tr>
-    <td style="vertical-align: top;">
-      Finall, M-Radl provides easy to access emergency numbers that bikers can call to directly contact emergency services, without having to leave the app.
-    </td>
-    <td>
-      <img src="public/readme-images/EmergencyContacts.png" width="300" style="margin-left: 20px;">
-    </td>
-  </tr>
-</table>
-<p>
+Finall, M-Radl provides easy to access emergency numbers that bikers can call to directly contact emergency services, without having to leave the app.
+<p align="center">
+  <img src="public/readme-images/EmergencyContacts.png" width="160">
+</p>
 
 
 <br/><br/>
