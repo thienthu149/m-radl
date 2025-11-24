@@ -1,9 +1,10 @@
-# M-Radl
-*Ride Safe and Sound. Know Your Way Around! - the smarter way to cycle Munich*  
+# <p align="center"> M-Radl </p>
+
+## <p align="center">Hackatum 2025 | City of Munich 2nd palce | Community Vote Winner</p> ##
+
+<br/>
+
 *[📄🎤 View the pitch presentation (PDF)](public/Pitch.pdf)*  
-
-
----
 
 ### 🧭 Navigation Modes ###
 M-Radl strives to make biking around Munich safer and more comfortable. It provides multiple routing options, such as a standard navigatio mode, a Safe Mode to ride securely at night by avoiding dark areas, and a Cool Mode that analyzes and combines multiple data sources to calculate the shadiest route during the summer heat. 
@@ -41,12 +42,3 @@ Finall, M-Radl provides easy to access emergency numbers that bikers can call to
 <p align="center">
   <img src="public/readme-images/EmergencyContacts.png" width="160">
 </p>
-
-
-<br/><br/>
----
-<p align="center">Hackatum November 2025 | 2nd Place (Landeshauptstadt München) | Community Award Winner</p>
-
----
-
-
